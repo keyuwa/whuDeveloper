@@ -4,6 +4,8 @@
 
 页面在 <http://localhost:5173>，接口在 <http://localhost:8080>。
 
+产品说明见 [需求与建设文档](docs/whu-top-developer-mvp.md)（对应在线文档 <https://whu-top-developer-mvp-daw6.pages.grok.bot/>）。本仓库只跑其中一条演示路径，不含教务校验、邮件验证码、催办和等级后台。
+
 ## 怎么跑
 
 需要 Docker，以及能使用 `docker compose`。
