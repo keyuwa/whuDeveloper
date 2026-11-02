@@ -29,6 +29,8 @@ services:
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-whu}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-whu}
       JWT_SECRET: ${JWT_SECRET:-whu-top-developer-demo-jwt-secret-key-32bytes-min}
+      APP_OTP_EXPOSE: ${APP_OTP_EXPOSE:-true}
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Shanghai
     ports:
       - "8080:8080"
     depends_on:

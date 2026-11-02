@@ -26,18 +26,30 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 64)
-    private String username;
+    @Column(nullable = false, unique = true, length = 120)
+    private String email;
 
     @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash;
 
-    @Column(name = "display_name", nullable = false, length = 64)
-    private String displayName;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private Role role;
+
+    @Column(name = "display_name", nullable = false, length = 64)
+    private String displayName;
+
+    @Column(name = "real_name", length = 64)
+    private String realName;
+
+    @Column(name = "ability_level", length = 8)
+    private String abilityLevel;
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
+    @Column(nullable = false, length = 32)
+    private String status;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -46,6 +58,9 @@ public class User {
     void onCreate() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+        if (status == null) {
+            status = "ACTIVE";
         }
     }
 }

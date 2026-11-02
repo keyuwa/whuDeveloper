@@ -1,7 +1,9 @@
 package edu.whu.developer.application;
 
-import edu.whu.developer.project.ProjectResponse;
-import edu.whu.developer.project.ProjectService;
+import edu.whu.developer.application.ApplicationService.ApplicationResponse;
+import edu.whu.developer.application.ApplicationService.InterviewRequest;
+import edu.whu.developer.application.ApplicationService.ProposalRequest;
+import edu.whu.developer.application.ApplicationService.ReviewRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,15 +15,13 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/v1")
 public class ApplicationController {
 
     private final ApplicationService applications;
-    private final ProjectService projects;
 
-    public ApplicationController(ApplicationService applications, ProjectService projects) {
+    public ApplicationController(ApplicationService applications) {
         this.applications = applications;
-        this.projects = projects;
     }
 
     @PostMapping("/tasks/{taskId}/applications")
@@ -30,22 +30,27 @@ public class ApplicationController {
     }
 
     @GetMapping("/tasks/{taskId}/applications")
-    public List<ApplicationResponse> listForTask(@PathVariable Long taskId) {
-        return applications.listForTask(taskId);
+    public List<ApplicationResponse> forTask(@PathVariable Long taskId) {
+        return applications.forTask(taskId);
     }
 
-    @GetMapping("/applications/mine")
+    @GetMapping("/me/applications")
     public List<ApplicationResponse> mine() {
         return applications.mine();
     }
 
-    @PostMapping("/applications/{id}/accept")
-    public ApplicationResponse accept(@PathVariable Long id) {
-        return applications.accept(id);
+    @GetMapping("/publisher/applications")
+    public List<ApplicationResponse> inbox() {
+        return applications.publisherInbox();
     }
 
-    @PostMapping("/applications/{id}/enroll")
-    public ProjectResponse enroll(@PathVariable Long id) {
-        return projects.enroll(id);
+    @PostMapping("/applications/{id}/review")
+    public ApplicationResponse review(@PathVariable Long id, @Valid @RequestBody ReviewRequest request) {
+        return applications.review(id, request);
+    }
+
+    @PostMapping("/applications/{id}/interview")
+    public ApplicationResponse interview(@PathVariable Long id, @Valid @RequestBody InterviewRequest request) {
+        return applications.interview(id, request);
     }
 }

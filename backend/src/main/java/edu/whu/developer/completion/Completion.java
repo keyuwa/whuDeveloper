@@ -32,19 +32,31 @@ public class Completion {
     @JoinColumn(name = "project_id", nullable = false, unique = true)
     private Project project;
 
-    @Column(name = "pr_url", nullable = false, length = 500)
-    private String prUrl;
+    @Column(name = "report_md", nullable = false, columnDefinition = "text")
+    private String reportMd;
 
-    @Column(nullable = false, length = 1000)
-    private String summary;
+    @Column(name = "pr_urls", nullable = false, columnDefinition = "text")
+    private String prUrls;
+
+    @Column(nullable = false, length = 32)
+    private String status;
+
+    @Column(name = "review_note", length = 500)
+    private String reviewNote;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
 
     @PrePersist
     void onCreate() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+        if (status == null) {
+            status = "SUBMITTED";
         }
     }
 }
