@@ -11,7 +11,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -22,7 +21,7 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "weekly_reports", uniqueConstraints = @UniqueConstraint(columnNames = {"project_id", "week_number"}))
+@Table(name = "weekly_reports")
 public class WeeklyReport {
 
     @Id
@@ -33,19 +32,36 @@ public class WeeklyReport {
     @JoinColumn(name = "project_id", nullable = false)
     private Project project;
 
-    @Column(name = "week_number", nullable = false)
-    private Integer weekNumber;
+    @Column(name = "week_index", nullable = false)
+    private Integer weekIndex;
 
-    @Column(nullable = false, length = 4000)
+    @Column(nullable = false, columnDefinition = "text")
     private String content;
+
+    @Column(columnDefinition = "text")
+    private String plan;
+
+    @Column(nullable = false, length = 32)
+    private String status;
+
+    private Integer score;
+
+    @Column(name = "score_comment", length = 500)
+    private String scoreComment;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "scored_at")
+    private LocalDateTime scoredAt;
 
     @PrePersist
     void onCreate() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+        if (status == null) {
+            status = "SUBMITTED";
         }
     }
 }

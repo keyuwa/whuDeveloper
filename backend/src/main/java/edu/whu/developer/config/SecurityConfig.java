@@ -35,31 +35,30 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/otp/send", "/api/v1/auth/register", "/api/v1/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/tasks", "/api/v1/tasks/*").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors
-                        .authenticationEntryPoint((request, response, ex) -> {
-                            response.setStatus(HttpStatus.UNAUTHORIZED.value());
-                            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-                            response.setContentType("application/json;charset=UTF-8");
-                            response.getWriter().write("{\"message\":\"请先登录\"}");
-                        })
-                        .accessDeniedHandler((request, response, ex) -> {
-                            response.setStatus(HttpStatus.FORBIDDEN.value());
-                            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-                            response.setContentType("application/json;charset=UTF-8");
-                            response.getWriter().write("{\"message\":\"没有权限\"}");
-                        }))
+                        .authenticationEntryPoint((request, response, ex) -> write(response, HttpStatus.UNAUTHORIZED, "请先登录"))
+                        .accessDeniedHandler((request, response, ex) -> write(response, HttpStatus.FORBIDDEN, "没有权限")))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
+    private static void write(jakarta.servlet.http.HttpServletResponse response, HttpStatus status, String message) throws java.io.IOException {
+        response.setStatus(status.value());
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"message\":\"" + message + "\"}");
+    }
+
     @Bean
     UserDetailsService userDetailsService(UserRepository users) {
-        return username -> users.findByUsername(username)
+        return email -> users.findByEmail(email)
+                .filter(user -> "ACTIVE".equals(user.getStatus()))
                 .map(AuthUser::from)
-                .orElseThrow(() -> new UsernameNotFoundException(username));
+                .orElseThrow(() -> new UsernameNotFoundException(email));
     }
 
     @Bean

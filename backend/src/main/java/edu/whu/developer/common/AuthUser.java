@@ -12,33 +12,49 @@ import java.util.List;
 public class AuthUser implements UserDetails {
 
     private final Long id;
-    private final String username;
+    private final String email;
     private final String displayName;
+    private final String realName;
     private final Role role;
+    private final String abilityLevel;
     private final String passwordHash;
 
-    public AuthUser(Long id, String username, String displayName, Role role, String passwordHash) {
+    public AuthUser(Long id, String email, String displayName, String realName, Role role, String abilityLevel, String passwordHash) {
         this.id = id;
-        this.username = username;
+        this.email = email;
         this.displayName = displayName;
+        this.realName = realName;
         this.role = role;
+        this.abilityLevel = abilityLevel;
         this.passwordHash = passwordHash;
     }
 
     public static AuthUser from(User user) {
-        return new AuthUser(user.getId(), user.getUsername(), user.getDisplayName(), user.getRole(), user.getPasswordHash());
+        return new AuthUser(user.getId(), user.getEmail(), user.getDisplayName(), user.getRealName(), user.getRole(), user.getAbilityLevel(), user.getPasswordHash());
     }
 
     public Long getId() {
         return id;
     }
 
+    public String getEmail() {
+        return email;
+    }
+
     public String getDisplayName() {
         return displayName;
     }
 
+    public String getRealName() {
+        return realName;
+    }
+
     public Role getRole() {
         return role;
+    }
+
+    public String getAbilityLevel() {
+        return abilityLevel;
     }
 
     @Override
@@ -53,7 +69,7 @@ public class AuthUser implements UserDetails {
 
     @Override
     public String getUsername() {
-        return username;
+        return email;
     }
 
     @Override
