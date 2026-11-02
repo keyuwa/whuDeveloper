@@ -22,10 +22,10 @@ public class JwtService {
         this.expirationMs = expirationMs;
     }
 
-    public String issue(String username) {
+    public String issue(String email) {
         Instant now = Instant.now();
         return Jwts.builder()
-                .subject(username)
+                .subject(email)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(expirationMs)))
                 .signWith(key)

@@ -11,4 +11,4 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /src/target/whu-developer-api.jar app.jar
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-Duser.timezone=Asia/Shanghai", "-jar", "app.jar"]

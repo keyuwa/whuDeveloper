@@ -9,5 +9,9 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
     Optional<Project> findByApplicationId(Long applicationId);
 
-    List<Project> findByStudentIdOrPublisherIdOrderByIdDesc(Long studentId, Long publisherId);
+    List<Project> findByStudentIdOrderByIdDesc(Long studentId);
+
+    List<Project> findByPublisherIdOrderByIdDesc(Long publisherId);
+
+    long countByTaskIdAndStatusNot(Long taskId, String status);
 }

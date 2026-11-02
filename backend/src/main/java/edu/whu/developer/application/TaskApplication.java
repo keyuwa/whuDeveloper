@@ -4,8 +4,6 @@ import edu.whu.developer.auth.User;
 import edu.whu.developer.task.Task;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -15,7 +13,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -26,7 +23,7 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "applications", uniqueConstraints = @UniqueConstraint(columnNames = {"task_id", "student_id"}))
+@Table(name = "applications")
 public class TaskApplication {
 
     @Id
@@ -41,12 +38,23 @@ public class TaskApplication {
     @JoinColumn(name = "student_id", nullable = false)
     private User student;
 
-    @Column(nullable = false, length = 2000)
-    private String proposal;
+    @Column(name = "proposal_md", nullable = false, columnDefinition = "text")
+    private String proposalMd;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
-    private ApplicationStatus status;
+    private String status;
+
+    @Column(name = "interview_at")
+    private LocalDateTime interviewAt;
+
+    @Column(name = "interview_note", length = 500)
+    private String interviewNote;
+
+    @Column(name = "review_note", length = 500)
+    private String reviewNote;
+
+    @Column(name = "remind_count", nullable = false)
+    private int remindCount;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -62,7 +70,7 @@ public class TaskApplication {
         }
         updatedAt = now;
         if (status == null) {
-            status = ApplicationStatus.SUBMITTED;
+            status = "SUBMITTED";
         }
     }
 

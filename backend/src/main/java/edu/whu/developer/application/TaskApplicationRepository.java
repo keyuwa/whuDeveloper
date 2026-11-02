@@ -12,4 +12,8 @@ public interface TaskApplicationRepository extends JpaRepository<TaskApplication
     List<TaskApplication> findByStudentIdOrderByIdDesc(Long studentId);
 
     List<TaskApplication> findByTaskIdOrderByIdAsc(Long taskId);
+
+    List<TaskApplication> findByStatusOrderByIdAsc(String status);
+
+    List<TaskApplication> findByTask_Publisher_IdOrderByIdDesc(Long publisherId);
 }

@@ -22,8 +22,7 @@ public final class AuthSupport {
     public static AuthUser requireRole(Role role) {
         AuthUser user = current();
         if (user.getRole() != role) {
-            String message = role == Role.PUBLISHER ? "只有发布者可以执行此操作" : "只有学生可以执行此操作";
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, message);
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "没有权限执行此操作");
         }
         return user;
     }
