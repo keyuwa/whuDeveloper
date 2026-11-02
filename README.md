@@ -110,7 +110,7 @@ docker-compose.yml
 
 ## 不用 Docker 时
 
-本机需要 JDK 21、Maven、Node.js 20+，以及一个 MySQL 8。先建库和用户（与 `.env.example` 一致），再：
+本机需要 JDK 17、Maven、Node.js 20+，以及一个 MySQL 8。先建库和用户（与 `.env.example` 一致），再：
 
 ```bash
 cd backend && mvn spring-boot:run
