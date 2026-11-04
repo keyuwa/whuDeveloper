@@ -1,0 +1,88 @@
+#!/bin/sh
+# Sourced by the official nginx image before 20-envsubst-on-templates.sh.
+# The filename must stay *.envsh and the file must be executable, or the
+# exported values never reach envsubst.
+
+resolv_conf=${NGINX_RESOLV_CONF:-/etc/resolv.conf}
+
+if [ -z "${NGINX_RESOLVER:-}" ]; then
+  NGINX_RESOLVER=$(awk '/^nameserver[ \t]+/ {
+    ip = $2
+    if (ip ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) {
+      printf "%s ", ip
+    }
+  }' "$resolv_conf" 2>/dev/null || true)
+  NGINX_RESOLVER=$(printf '%s' "$NGINX_RESOLVER" | awk '{$1=$1; print}')
+fi
+
+if [ -z "${NGINX_RESOLVER:-}" ]; then
+  NGINX_RESOLVER=127.0.0.11
+fi
+
+# API_UPSTREAM is a full origin: http://api:8080 locally, or
+# https://whu-developer-api.onrender.com on Render. A bare host:port is
+# accepted and treated as http. No path: proxy_pass keeps the request URI.
+upstream=${API_UPSTREAM:-http://api:8080}
+case "$upstream" in
+  http://*|https://*) ;;
+  *) upstream="http://${upstream}" ;;
+esac
+
+scheme=${upstream%%://*}
+rest=${upstream#*://}
+rest=${rest%%\?*}
+rest=${rest%%#*}
+hostport=${rest%%/*}
+path=""
+case "$rest" in
+  */*) path="/${rest#*/}" ;;
+esac
+host=${hostport%%:*}
+port=""
+case "$hostport" in
+  *:*) port=${hostport#*:} ;;
+esac
+
+case "$scheme" in
+  http|https) ;;
+  *)
+    echo "nginx upstream: API_UPSTREAM scheme must be http or https" >&2
+    exit 1
+    ;;
+esac
+case "$host" in
+  ""|*[!A-Za-z0-9._-]*)
+    echo "nginx upstream: API_UPSTREAM host is invalid" >&2
+    exit 1
+    ;;
+esac
+if [ -n "$port" ]; then
+  case "$port" in
+    *[!0-9]*)
+      echo "nginx upstream: API_UPSTREAM port is invalid" >&2
+      exit 1
+      ;;
+  esac
+fi
+if [ -n "$path" ] && [ "$path" != "/" ]; then
+  echo "nginx upstream: API_UPSTREAM must not include a path" >&2
+  exit 1
+fi
+
+API_UPSTREAM_SSL_NAME=$host
+if [ -n "$port" ]; then
+  API_UPSTREAM="${scheme}://${host}:${port}"
+  API_UPSTREAM_HOST="${host}:${port}"
+  if [ "$scheme" = "http" ] && [ "$port" = "80" ]; then
+    API_UPSTREAM_HOST=$host
+  fi
+  if [ "$scheme" = "https" ] && [ "$port" = "443" ]; then
+    API_UPSTREAM_HOST=$host
+  fi
+else
+  API_UPSTREAM="${scheme}://${host}"
+  API_UPSTREAM_HOST=$host
+fi
+
+export NGINX_RESOLVER API_UPSTREAM API_UPSTREAM_HOST API_UPSTREAM_SSL_NAME
+echo "nginx upstream: resolver=[${NGINX_RESOLVER}] API_UPSTREAM=${API_UPSTREAM} host=${API_UPSTREAM_HOST}" >&2
