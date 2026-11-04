@@ -36,6 +36,11 @@ public class ProjectController {
         return projects.get(id);
     }
 
+    @PostMapping("/{id}/leave")
+    public ProjectResponse leave(@PathVariable Long id) {
+        return projects.leave(id);
+    }
+
     @PostMapping("/{id}/milestones/{milestoneId}/submit")
     public ProjectResponse submitMilestone(@PathVariable Long id, @PathVariable Long milestoneId, @Valid @RequestBody MilestoneSubmit request) {
         return projects.submitMilestone(id, milestoneId, request);

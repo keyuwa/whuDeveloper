@@ -42,8 +42,42 @@ public class User {
     @Column(name = "real_name", length = 64)
     private String realName;
 
+    @Column(length = 64)
+    private String school;
+
+    @Column(length = 64)
+    private String college;
+
+    @Column(length = 64)
+    private String major;
+
+    /** 本科生 / 硕士生 / 博士生 */
+    @Column(name = "student_identity", length = 16)
+    private String studentIdentity;
+
+    @Column(length = 500)
+    private String skills;
+
+    @Column(columnDefinition = "text")
+    private String bio;
+
+    @Column(name = "resume_file_url", length = 500)
+    private String resumeFileUrl;
+
+    @Column(name = "resume_file_name", length = 255)
+    private String resumeFileName;
+
     @Column(name = "ability_level", length = 8)
     private String abilityLevel;
+
+    @Column(nullable = false)
+    private int points = 0;
+
+    @Column(name = "ability_apprentice", nullable = false)
+    private boolean abilityApprentice = false;
+
+    @Column(name = "ability_mgmt", nullable = false)
+    private boolean abilityMgmt = false;
 
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;

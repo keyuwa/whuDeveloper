@@ -19,6 +19,6 @@ public class SystemSetting {
     @Column(name = "setting_key", length = 64)
     private String settingKey;
 
-    @Column(name = "setting_value", nullable = false, length = 200)
+    @Column(name = "setting_value", nullable = false, columnDefinition = "MEDIUMTEXT")
     private String settingValue;
 }

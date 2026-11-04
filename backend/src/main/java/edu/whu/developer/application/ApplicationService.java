@@ -1,8 +1,10 @@
 package edu.whu.developer.application;
 
+import edu.whu.developer.ability.PointService;
 import edu.whu.developer.auth.Role;
 import edu.whu.developer.auth.User;
 import edu.whu.developer.auth.UserRepository;
+import edu.whu.developer.auth.UserResponse;
 import edu.whu.developer.common.AuthSupport;
 import edu.whu.developer.common.AuthUser;
 import edu.whu.developer.common.MailService;
@@ -33,6 +35,7 @@ public class ApplicationService {
     private final NotificationService notifications;
     private final MailService mail;
     private final AuditService audit;
+    private final PointService points;
 
     public ApplicationService(TaskRepository tasks,
                               TaskApplicationRepository applications,
@@ -41,19 +44,23 @@ public class ApplicationService {
                               ProjectService projectService,
                               NotificationService notifications,
                               MailService mail,
-                              AuditService audit) {
+                              AuditService audit,
+                              PointService points) {
         this.tasks = tasks;
         this.applications = applications;
         this.users = users;
         this.projects = projects;
         this.projectService = projectService;
+        this.points = points;
         this.notifications = notifications;
         this.mail = mail;
         this.audit = audit;
     }
 
     @Transactional
-    public ApplicationResponse submit(Long taskId, ProposalRequest request) {
+    public ApplicationResponse submit(Long taskId,
+                                      String proposalText,
+                                      org.springframework.web.multipart.MultipartFile file) {
         AuthUser student = AuthSupport.requireRole(Role.STUDENT);
         Task task = tasks.findById(taskId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在"));
         if (!"OPEN".equals(task.getStatus())) {
@@ -63,10 +70,29 @@ public class ApplicationService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "每个任务只能投递一次");
         }
         User studentEntity = users.findById(student.getId()).orElseThrow();
+        if (!UserResponse.isResumeReady(studentEntity)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请先完善简历后再投递申请");
+        }
+        String text = proposalText == null ? "" : proposalText.trim();
+        boolean hasFile = file != null && !file.isEmpty();
+        if (text.isBlank() && !hasFile) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写申请内容，或上传 PDF 附件");
+        }
+        if (text.length() > 10000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "申请文字不超过 10000 字");
+        }
         TaskApplication application = new TaskApplication();
         application.setTask(task);
         application.setStudent(studentEntity);
-        application.setProposalMd(request.proposalMd().trim());
+        application.setProposalMd(text);
+        if (hasFile) {
+            byte[] pdf = readPdf(file);
+            application.setProposalPdf(pdf);
+            String filename = file.getOriginalFilename();
+            application.setProposalFileName(filename == null
+                    ? "proposal.pdf"
+                    : filename.replace('\\', '/').substring(filename.replace('\\', '/').lastIndexOf('/') + 1));
+        }
         application.setStatus("SUBMITTED");
         applications.save(application);
         notifications.push(task.getPublisher().getId(), "新的申请书", student.getDisplayName() + " 申请了「" + task.getTitle() + "」");
@@ -110,8 +136,15 @@ public class ApplicationService {
         application.setReviewNote(blank(request.note()));
         if ("ACCEPT".equals(request.decision())) {
             application.setStatus("ACCEPTED");
-            projectService.openFromApplication(application);
-            notifyStudent(application, "申请已通过", "你申请的「" + application.getTask().getTitle() + "」已录取并入学。");
+            var project = projectService.openFromApplication(application);
+            points.award(
+                    application.getStudent().getId(),
+                    20,
+                    "录用入项：「" + application.getTask().getTitle() + "」",
+                    "ENROLL",
+                    String.valueOf(project.id()),
+                    "ENROLL:" + project.id());
+            notifyStudent(application, "申请已通过", "你申请的「" + application.getTask().getTitle() + "」已通过，可进入项目协作。");
             audit.record(publisher.getId(), "APPLICATION", application.getId(), "ACCEPT", null);
         } else if ("REJECT".equals(request.decision())) {
             application.setStatus("REJECTED");
@@ -145,15 +178,25 @@ public class ApplicationService {
 
     private ApplicationResponse toResponse(TaskApplication application) {
         Long projectId = projects.findByApplicationId(application.getId()).map(project -> project.getId()).orElse(null);
+        User student = application.getStudent();
         return new ApplicationResponse(
                 application.getId(),
                 application.getTask().getId(),
                 application.getTask().getTitle(),
-                application.getTask().getRoleType(),
-                application.getStudent().getId(),
-                application.getStudent().getDisplayName(),
-                application.getStudent().getAbilityLevel(),
+                application.getTask().getTechField(),
+                student.getId(),
+                student.getDisplayName(),
+                student.getRealName(),
+                student.getSchool(),
+                student.getCollege(),
+                student.getMajor(),
+                student.getStudentIdentity(),
+                student.getBio(),
+                student.getResumeFileUrl(),
+                student.getResumeFileName(),
+                student.getAbilityLevel(),
                 application.getProposalMd(),
+                application.getProposalFileName(),
                 application.getStatus(),
                 application.getInterviewAt(),
                 application.getInterviewNote(),
@@ -167,7 +210,38 @@ public class ApplicationService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    public record ProposalRequest(@NotBlank(message = "请填写申请书") String proposalMd) {
+    static byte[] readPdf(org.springframework.web.multipart.MultipartFile file) {
+        if (file == null || file.isEmpty() || file.getSize() > 5 * 1024 * 1024) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请上传不超过 5 MB 的 PDF 申请书");
+        }
+        String name = file.getOriginalFilename();
+        if (name == null || name.length() > 255 || !name.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "申请书必须是 PDF 文件，文件名不超过 255 字符");
+        }
+        try {
+            byte[] bytes = file.getBytes();
+            if (bytes.length < 5 || !new String(bytes, 0, 5, java.nio.charset.StandardCharsets.US_ASCII).equals("%PDF-")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "文件不是有效的 PDF");
+            }
+            return bytes;
+        } catch (java.io.IOException error) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "读取申请书失败，请重试", error);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] proposal(Long id) {
+        AuthUser user = AuthSupport.current();
+        TaskApplication application = applications.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "申请不存在"));
+        if (user.getRole() != Role.ADMIN && !application.getStudent().getId().equals(user.getId())
+                && !application.getTask().getPublisher().getId().equals(user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权查看该申请书");
+        }
+        if (application.getProposalFileName() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "该申请没有 PDF 文件");
+        }
+        return application.getProposalPdf();
     }
 
     public record ReviewRequest(@NotBlank String decision, @Size(max = 500) String note) {
@@ -183,8 +257,17 @@ public class ApplicationService {
             String taskType,
             Long studentId,
             String studentName,
+            String realName,
+            String school,
+            String college,
+            String major,
+            String studentIdentity,
+            String bio,
+            String resumeFileUrl,
+            String resumeFileName,
             String abilityLevel,
             String proposalMd,
+            String proposalFileName,
             String status,
             LocalDateTime interviewAt,
             String interviewNote,

@@ -47,4 +47,24 @@ public class NotificationService {
             notification.setReadAt(LocalDateTime.now());
         }
     }
+
+    @Transactional
+    public int markAllRead() {
+        return notifications.markAllRead(AuthSupport.current().getId(), LocalDateTime.now());
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        Notification notification = notifications.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "通知不存在"));
+        if (!notification.getUserId().equals(AuthSupport.current().getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "不能删除别人的通知");
+        }
+        notifications.delete(notification);
+    }
+
+    @Transactional
+    public int deleteAllMine() {
+        return notifications.deleteAllByUserId(AuthSupport.current().getId());
+    }
 }

@@ -10,6 +10,10 @@ public interface TaskMessageRepository extends JpaRepository<TaskMessage, Long> 
 
     List<TaskMessage> findByTaskIdAndStudentIdOrderByIdAsc(Long taskId, Long studentId);
 
+    void deleteByTaskId(Long taskId);
+
+    void deleteByTaskIdAndStudentId(Long taskId, Long studentId);
+
     @Query("""
             select m from TaskMessage m
             where m.student.id = :userId or m.sender.id = :userId or m.task.publisher.id = :userId

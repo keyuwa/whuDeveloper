@@ -18,10 +18,17 @@ public class SettingService {
                 .orElse(fallback);
     }
 
+    public String getString(String key, String fallback) {
+        return settings.findById(key)
+                .map(SystemSetting::getSettingValue)
+                .filter(value -> value != null && !value.isBlank())
+                .orElse(fallback);
+    }
+
     public void put(String key, String value) {
         SystemSetting setting = settings.findById(key).orElseGet(SystemSetting::new);
         setting.setSettingKey(key);
-        setting.setSettingValue(value);
+        setting.setSettingValue(value == null ? "" : value);
         settings.save(setting);
     }
 }

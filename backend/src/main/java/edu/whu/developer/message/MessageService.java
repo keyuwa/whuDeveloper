@@ -46,6 +46,17 @@ public class MessageService {
         return messages.findByTaskIdAndStudentIdOrderByIdAsc(taskId, threadStudent).stream().map(this::toView).toList();
     }
 
+    /** 学生点击发布方 /「立即沟通」时打开会话，不自动发送消息。 */
+    @Transactional(readOnly = true)
+    public List<MessageView> open(Long taskId) {
+        AuthUser student = AuthSupport.requireRole(Role.STUDENT);
+        Task task = tasks.findById(taskId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在"));
+        if (!"OPEN".equals(task.getStatus()) && !"CLOSED".equals(task.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前任务暂不可沟通");
+        }
+        return messages.findByTaskIdAndStudentIdOrderByIdAsc(taskId, student.getId()).stream().map(this::toView).toList();
+    }
+
     @Transactional
     public MessageView send(Long taskId, SendRequest request) {
         AuthUser user = AuthSupport.current();
@@ -64,6 +75,19 @@ public class MessageService {
         return toView(message);
     }
 
+    @Transactional
+    public void deleteThread(Long taskId, Long studentId) {
+        AuthUser user = AuthSupport.current();
+        Long threadStudent = resolveStudent(taskId, studentId, user);
+        Task task = tasks.findById(taskId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在"));
+        boolean allowed = user.getId().equals(threadStudent)
+                || (user.getRole() == Role.PUBLISHER && task.getPublisher().getId().equals(user.getId()));
+        if (!allowed) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "不能删除该会话");
+        }
+        messages.deleteByTaskIdAndStudentId(taskId, threadStudent);
+    }
+
     @Transactional(readOnly = true)
     public List<ThreadSummary> inbox() {
         AuthUser user = AuthSupport.current();
@@ -74,9 +98,14 @@ public class MessageService {
                 continue;
             }
             String key = message.getTask().getId() + ":" + message.getStudent().getId();
+            String publisherName = message.getTask().getPublisher().getRealName() == null
+                    ? message.getTask().getPublisher().getDisplayName()
+                    : message.getTask().getPublisher().getRealName();
             grouped.putIfAbsent(key, new ThreadSummary(
                     message.getTask().getId(),
                     message.getTask().getTitle(),
+                    message.getTask().getPublisher().getId(),
+                    publisherName,
                     message.getStudent().getId(),
                     message.getStudent().getDisplayName(),
                     message.getBody(),
@@ -116,6 +145,15 @@ public class MessageService {
     public record MessageView(Long id, Long taskId, Long studentId, Long senderId, String senderName, String body, LocalDateTime createdAt) {
     }
 
-    public record ThreadSummary(Long taskId, String taskTitle, Long studentId, String studentName, String lastBody, LocalDateTime createdAt) {
+    public record ThreadSummary(
+            Long taskId,
+            String taskTitle,
+            Long publisherId,
+            String publisherName,
+            Long studentId,
+            String studentName,
+            String lastBody,
+            LocalDateTime createdAt
+    ) {
     }
 }

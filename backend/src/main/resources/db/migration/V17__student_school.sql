@@ -1,0 +1,2 @@
+ALTER TABLE users
+  ADD COLUMN school VARCHAR(64) NULL AFTER real_name;

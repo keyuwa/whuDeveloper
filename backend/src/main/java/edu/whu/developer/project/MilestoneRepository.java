@@ -7,4 +7,6 @@ import java.util.List;
 public interface MilestoneRepository extends JpaRepository<Milestone, Long> {
 
     List<Milestone> findByProjectIdOrderBySeqAsc(Long projectId);
+
+    void deleteByProjectId(Long projectId);
 }

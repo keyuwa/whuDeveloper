@@ -95,7 +95,7 @@ public class AuthService {
         user.setStatus("ACTIVE");
         if (role == Role.STUDENT) {
             user.setDisplayName(request.displayName().trim());
-            user.setAbilityLevel("L1");
+            user.setAbilityLevel("LV0");
         } else {
             if (request.realName() == null || request.realName().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "发布方需要填写实名");

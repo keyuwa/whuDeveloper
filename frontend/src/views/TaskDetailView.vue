@@ -1,66 +1,143 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
-import { auth } from '../auth'
-import { PROPOSAL_TEMPLATE, type ChatMessage, type Task } from '../types'
+import { auth, setSession } from '../auth'
+import { loadDicts, scheduleLabelMap } from '../composables/useDicts'
+import { renderMarkdown } from '../markdown'
+import { PROPOSAL_TEMPLATE, TASK_ROLE_LABEL, type Application, type Task, type User } from '../types'
+
+const scheduleLabels = scheduleLabelMap()
+import ProposalFile from '../components/ProposalFile.vue'
 import { routeId } from '../format'
 
 const route = useRoute()
 const router = useRouter()
 const task = ref<Task | null>(null)
-const messages = ref<ChatMessage[]>([])
-const proposal = ref(PROPOSAL_TEMPLATE)
-const draft = ref('')
-const studentId = ref('')
-const error = ref('')
-const info = ref('')
+const proposalText = ref('')
+const proposalFile = ref<File | null>(null)
+const myApplication = ref<Application | null>(null)
+const applicationLabels: Record<string, string> = { SUBMITTED: '待审阅', ACCEPTED: '已通过', REJECTED: '未通过' }
+const proposalGuideHtml = computed(() => renderMarkdown(PROPOSAL_TEMPLATE))
+const myProposalHtml = computed(() => renderMarkdown(myApplication.value?.proposalMd || ''))
+const canSubmitApplication = computed(
+  () => Boolean(proposalText.value.trim() || proposalFile.value) && task.value?.status === 'OPEN',
+)
+function selectProposal(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  proposalFile.value = null
+  if (!file) return
+  if (!file.name.toLowerCase().endsWith('.pdf') || file.size > 5 * 1024 * 1024 || file.size === 0) {
+    Message.error('请选择不超过 5 MB 的 PDF 附件')
+    input.value = ''
+    return
+  }
+  proposalFile.value = file
+}
+function clearProposalFile() {
+  proposalFile.value = null
+}
 const loading = ref(false)
 const id = computed(() => routeId(route.params.id))
 const isStudent = computed(() => auth.user?.role === 'STUDENT')
-const isOwner = computed(() => auth.user?.role === 'PUBLISHER' && task.value?.publisherId === auth.user.id)
+const resumeReady = computed(() => Boolean(auth.user?.resumeReady))
+
+const techFieldTags = computed(() =>
+  (task.value?.techStack || '')
+    .split(/[,，、/|]+/)
+    .map((item) => item.trim())
+    .filter(Boolean),
+)
+
+const programmingTags = computed(() =>
+  (task.value?.programmingLanguages || '')
+    .split(/[,，、/|]+/)
+    .map((item) => item.trim())
+    .filter(Boolean),
+)
 
 async function load() {
   if (!id.value) return
-  error.value = ''
-  const queryStudent = route.query.student
-  if (typeof queryStudent === 'string') studentId.value = queryStudent
+  await loadDicts()
+  proposalFile.value = null
+  myApplication.value = null
   task.value = await api<Task>(`/api/v1/tasks/${id.value}`)
-  if (auth.token && (isStudent.value || (isOwner.value && studentId.value))) {
-    const query = isOwner.value ? `?studentId=${studentId.value}` : ''
-    messages.value = await api<ChatMessage[]>(`/api/v1/tasks/${id.value}/messages${query}`)
+  if (isStudent.value) {
+    const me = await api<User>('/api/v1/me/resume')
+    if (auth.token && auth.user) setSession(auth.token, { ...auth.user, ...me })
+  }
+  if (isStudent.value && task.value.myApplicationId) {
+    const applications = await api<Application[]>('/api/v1/me/applications')
+    myApplication.value = applications.find(item => item.id === task.value?.myApplicationId) || null
   }
 }
 
-watch(() => route.fullPath, () => load().catch((cause) => { error.value = cause instanceof Error ? cause.message : '加载失败' }), { immediate: true })
+watch(
+  () => route.fullPath,
+  () => load().catch((cause) => Message.error(cause instanceof Error ? cause.message : '加载失败')),
+  { immediate: true },
+)
 
 async function apply() {
   if (!auth.token) return router.push('/auth/login')
+  if (!resumeReady.value) {
+    Message.warning('请先完善简历后再投递')
+    return router.push('/me/resume')
+  }
+  const text = proposalText.value.trim()
+  if (!text && !proposalFile.value) return Message.error('请填写申请内容，或上传 PDF 附件')
+  if (text.length > 10000) return Message.error('申请文字不超过 10000 字')
   loading.value = true
-  error.value = ''
   try {
-    await api(`/api/v1/tasks/${id.value}/applications`, { method: 'POST', body: JSON.stringify({ proposalMd: proposal.value }) })
-    info.value = '申请书已提交'
+    const body = new FormData()
+    body.append('proposalText', text)
+    if (proposalFile.value) body.append('file', proposalFile.value)
+    await api(`/api/v1/tasks/${id.value}/applications`, {
+      method: 'POST',
+      body,
+    })
+    Message.success('申请已提交')
+    proposalText.value = ''
+    proposalFile.value = null
     await load()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '提交失败'
+    Message.error(cause instanceof Error ? cause.message : '提交失败')
   } finally {
     loading.value = false
   }
 }
 
-async function send() {
+async function toggleShortlist() {
+  if (!auth.token) return router.push('/auth/login')
+  if (!isStudent.value || !task.value) return
   loading.value = true
-  error.value = ''
   try {
-    await api(`/api/v1/tasks/${id.value}/messages`, {
-      method: 'POST',
-      body: JSON.stringify({ body: draft.value, studentId: isOwner.value ? Number(studentId.value) : null }),
-    })
-    draft.value = ''
+    if (task.value.shortlisted) {
+      await api(`/api/v1/tasks/${task.value.id}/shortlist`, { method: 'DELETE' })
+      Message.success('已移出备选')
+    } else {
+      await api(`/api/v1/tasks/${task.value.id}/shortlist`, { method: 'POST' })
+      Message.success('已加入备选')
+    }
     await load()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '发送失败'
+    Message.error(cause instanceof Error ? cause.message : '操作失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function startChat() {
+  if (!auth.token) return router.push('/auth/login')
+  if (!isStudent.value || !id.value) return
+  loading.value = true
+  try {
+    await api(`/api/v1/tasks/${id.value}/messages/open`, { method: 'POST' })
+    await router.push({ path: '/messages', query: { taskId: String(id.value) } })
+  } catch (cause) {
+    Message.error(cause instanceof Error ? cause.message : '无法开始沟通')
   } finally {
     loading.value = false
   }
@@ -68,53 +145,321 @@ async function send() {
 </script>
 
 <template>
-  <section v-if="task" class="split">
-    <article class="card stack">
-      <div class="pills">
-        <span class="pill accent">{{ task.roleType }}</span>
-        <span class="pill">{{ task.difficulty }}</span>
-        <span class="pill">名额 {{ task.filled }}/{{ task.quota }}</span>
-        <span class="pill">{{ task.status }}</span>
+  <section v-if="task" class="detail">
+    <router-link to="/" class="back-link">← 返回项目广场</router-link>
+    <a-card class="hero-card" :bordered="false">
+      <a-typography-title :heading="3" style="margin: 0 0 12px">{{ task.title }}</a-typography-title>
+      <a-space wrap>
+        <a-tag size="large" class="mono">{{ task.publicCode }}</a-tag>
+        <a-tag color="arcoblue" size="large">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
+        <a-tag v-if="task.roleType === 'INTERN'" color="orangered" size="large">{{ task.difficulty }}</a-tag>
+        <a-tag color="green" size="large">{{ task.supportLanguages }} · 支持语言</a-tag>
+        <a-tag size="large">名额 {{ task.filled }}/{{ task.quota }}</a-tag>
+      </a-space>
+      <div v-if="isStudent" class="hero-actions">
+        <a-button type="primary" :loading="loading" @click="startChat">立即沟通</a-button>
+        <a-button
+          v-if="task.status === 'OPEN' && !task.projectId"
+          :type="task.shortlisted ? 'outline' : 'secondary'"
+          :loading="loading"
+          @click="toggleShortlist"
+        >
+          {{ task.shortlisted ? '取消备选' : '加入备选' }}
+        </a-button>
+        <a href="#apply" class="apply-jump">{{ task.myApplicationId ? '查看我的申请 ↓' : '准备申请书 ↓' }}</a>
       </div>
-      <h1>{{ task.title }}</h1>
-      <p class="muted">发布方 {{ task.publisherName }} · {{ task.durationWeeks }} 周 · 每周约 {{ task.estimatedHours }} 小时</p>
-      <p class="note">{{ task.stipendText }}</p>
-      <dl class="defs">
-        <dt>背景与目标</dt><dd>{{ task.background }}</dd>
-        <dt>技术栈</dt><dd>{{ task.techStack }}</dd>
-        <dt>产出要求</dt><dd>{{ task.outputRequirement }}</dd>
-        <dt>技术要求</dt><dd>{{ task.techRequirement }}</dd>
-        <dt>仓库</dt><dd>{{ task.repoUrl || '未提供' }}</dd>
-        <dt>学习资料</dt><dd>{{ task.learningMaterials || '未提供' }}</dd>
-      </dl>
-      <h2>PRD</h2>
-      <pre class="md">{{ task.prdMd }}</pre>
-      <h2>技术文档</h2>
-      <pre class="md">{{ task.techDocMd || '发布方尚未补充技术文档。' }}</pre>
-    </article>
-    <div class="stack">
-      <p v-if="error" class="banner">{{ error }}</p>
-      <p v-if="info" class="note">{{ info }}</p>
-      <form v-if="isStudent && !task.myApplicationId" class="card form" @submit.prevent="apply">
-        <h2>申请书</h2>
-        <p class="muted">先沟通再投递更好。每个任务只能投一单。</p>
-        <textarea v-model="proposal" rows="12" required />
-        <button class="btn primary" :disabled="loading">提交申请书</button>
-      </form>
-      <article v-else-if="isStudent && task.myApplicationStatus" class="card stack">
-        <h2>我的申请</h2>
-        <span class="pill accent">{{ task.myApplicationStatus }}</span>
-        <router-link v-if="task.projectId" :to="`/me/projects/${task.projectId}`">进入工作台</router-link>
-      </article>
-      <article v-if="auth.token && (isStudent || isOwner)" class="card stack">
-        <h2>任务私信</h2>
-        <label v-if="isOwner">学生 ID<input v-model="studentId" @change="load" /></label>
-        <p v-for="item in messages" :key="item.id"><strong>{{ item.senderName }}</strong> {{ item.body }}</p>
-        <p v-if="messages.length === 0" class="muted">还没有消息。</p>
-        <textarea v-model="draft" rows="3" placeholder="写一条消息" />
-        <button class="btn primary" type="button" :disabled="loading || !draft.trim()" @click="send">发送</button>
-      </article>
-      <p v-else class="card muted">登录后可以私信发布方并提交申请书。</p>
+    </a-card>
+
+    <div class="detail-grid">
+      <div class="main-col stack">
+        <a-card title="项目介绍">
+          <a-typography-paragraph>{{ task.background }}</a-typography-paragraph>
+          <a-divider v-if="task.prdFileUrl || task.prdMd" />
+          <div v-if="task.prdFileUrl" class="doc-file">
+            <strong>需求文档</strong>
+            <a :href="task.prdFileUrl" target="_blank" rel="noopener">{{ task.prdFileName || '打开 PDF' }}</a>
+          </div>
+          <div v-if="task.prdMd" class="project-document">
+            <template v-for="(line, index) in task.prdMd.replace(/\\n/g, '\n').split('\n')" :key="index">
+              <h3 v-if="/^#{1,6}\s/.test(line)">{{ line.replace(/^#{1,6}\s+/, '') }}</h3>
+              <p v-else-if="line.trim()">{{ line }}</p>
+            </template>
+          </div>
+        </a-card>
+
+        <a-card title="项目产出要求">
+          <pre class="md">{{ task.outputRequirement }}</pre>
+        </a-card>
+
+        <a-card title="能力要求">
+          <pre class="md">{{ task.techRequirement }}</pre>
+        </a-card>
+
+        <a-card title="补助水平">
+          <pre class="md">{{ task.stipendText || '未填写' }}</pre>
+        </a-card>
+
+        <a-card v-if="task.learningMaterials" title="学习资料">
+          <pre class="md">{{ task.learningMaterials }}</pre>
+        </a-card>
+
+        <a-card v-if="task.techDocFileUrl || task.techDocMd" title="技术文档">
+          <div v-if="task.techDocFileUrl" class="doc-file">
+            <a :href="task.techDocFileUrl" target="_blank" rel="noopener">{{ task.techDocFileName || '打开技术文档 PDF' }}</a>
+          </div>
+          <pre v-if="task.techDocMd" class="md">{{ task.techDocMd }}</pre>
+        </a-card>
+        <a-card v-if="isStudent" id="apply" class="application-panel" title="项目申请">
+          <template v-if="!task.myApplicationId">
+            <a-alert
+              v-if="!resumeReady"
+              type="warning"
+              style="margin-bottom: 14px"
+              title="投递前需先完善简历"
+            >
+              姓名、学校、学院、专业、在读身份与个人简介填写完整后方可申请。
+              <a-button type="text" @click="router.push('/me/resume')">去完善简历</a-button>
+            </a-alert>
+            <p class="application-intro">可直接填写文字申请，也可另附 PDF；至少提供其中一种。支持 Markdown。</p>
+            <div class="application-guide">
+              <strong>结构提示（填写时可参考，不会自动写入正文）</strong>
+              <article class="md-body proposal-guide" v-html="proposalGuideHtml" />
+            </div>
+            <a-textarea
+              v-model="proposalText"
+              :auto-size="{ minRows: 8, maxRows: 18 }"
+              :disabled="loading || task.status !== 'OPEN' || !resumeReady"
+              placeholder="在此填写申请内容…"
+              style="margin-bottom: 12px"
+            />
+            <label class="upload-area">
+              <strong>{{ proposalFile ? proposalFile.name : '可选：上传 PDF 附件' }}</strong>
+              <span>PDF 格式，最大 5 MB · 可不传</span>
+              <input type="file" accept=".pdf,application/pdf" :disabled="loading || task.status !== 'OPEN' || !resumeReady" @change="selectProposal" />
+            </label>
+            <div v-if="proposalFile" class="application-actions" style="margin-top: 8px">
+              <button type="button" class="linkish" @click="clearProposalFile">移除附件</button>
+            </div>
+            <div class="application-actions">
+              <span>每个项目仅可申请一次，请核对后提交。</span>
+              <a-button type="primary" :loading="loading" :disabled="!canSubmitApplication || !resumeReady" @click="apply">{{ task.status === 'OPEN' ? '提交申请' : '项目已关闭申请' }}</a-button>
+            </div>
+          </template>
+          <template v-else>
+            <div class="application-actions"><a-tag color="arcoblue">{{ applicationLabels[task.myApplicationStatus || ''] || task.myApplicationStatus }}</a-tag><a-button v-if="task.projectId" type="primary" @click="router.push(`/me/projects/${task.projectId}/progress`)">进入工作台</a-button></div>
+            <p class="application-intro">{{ task.myApplicationStatus === 'SUBMITTED' ? '申请已提交，请等待发布方审阅。' : task.myApplicationStatus === 'ACCEPTED' ? '申请已通过，可在工作台查看申请并提交周报。' : '本次申请未通过，可查看反馈并探索其他项目。' }}</p>
+            <article v-if="myApplication?.proposalMd" class="md-body proposal-view" v-html="myProposalHtml" />
+            <ProposalFile v-if="myApplication?.proposalFileName" :application-id="myApplication.id" :file-name="myApplication.proposalFileName" />
+            <p v-if="myApplication?.reviewNote" class="application-intro">审阅意见：{{ myApplication.reviewNote }}</p>
+          </template>
+        </a-card>
+      </div>
+
+      <aside class="side-col stack">
+        <a-card title="项目信息">
+          <div class="meta-list">
+            <div class="meta-row">
+              <span class="meta-label">发布方</span>
+              <button
+                v-if="isStudent || !auth.token"
+                type="button"
+                class="publisher-link"
+                @click="startChat"
+              >
+                {{ task.publisherName }}
+                <span>沟通</span>
+              </button>
+              <span v-else>{{ task.publisherName }}</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-label">任务类型</span>
+              <span>{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</span>
+            </div>
+            <div v-if="task.scheduleType" class="meta-row">
+              <span class="meta-label">{{ task.roleType === 'TA' ? '学期' : '科研周期' }}</span>
+              <span>{{ scheduleLabels[task.scheduleType] || task.scheduleType }}</span>
+            </div>
+            <div v-if="task.roleType === 'TA' && task.educationLevels" class="meta-row">
+              <span class="meta-label">在读身份</span>
+              <span>{{ task.educationLevels }}</span>
+            </div>
+            <div v-if="task.roleType !== 'TA'" class="meta-row">
+              <span class="meta-label">{{ task.roleType === 'RA' ? '研究方向' : '技术领域' }}</span>
+              <div>
+                <a-tag color="arcoblue" size="small" style="margin-right: 6px">{{ task.techField }}</a-tag>
+                <a-tag v-for="tag in techFieldTags" :key="tag" size="small" style="margin: 0 6px 6px 0">{{ tag }}</a-tag>
+              </div>
+            </div>
+            <div v-if="task.roleType !== 'TA'" class="meta-row">
+              <span class="meta-label">编程语言</span>
+              <div>
+                <a-tag v-for="tag in programmingTags" :key="tag" color="green" size="small" style="margin: 0 6px 6px 0">{{ tag }}</a-tag>
+              </div>
+            </div>
+            <div v-if="task.roleType === 'INTERN'" class="meta-row">
+              <span class="meta-label">项目难度</span>
+              <span>{{ task.difficulty }}</span>
+            </div>
+            <div v-if="task.roleType === 'INTERN' && task.repoUrl" class="meta-row">
+              <span class="meta-label">仓库</span>
+              <a :href="task.repoUrl" target="_blank" rel="noopener">{{ task.repoUrl }}</a>
+            </div>
+            <div class="meta-row">
+              <span class="meta-label">{{ task.roleType === 'INTERN' ? '开发周期' : '周期' }}</span>
+              <span>{{ task.durationWeeks }} 周</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-label">预估工时</span>
+              <span>每周约 {{ task.estimatedHours }} 小时</span>
+            </div>
+          </div>
+        </a-card>
+
+        <a-card v-if="!auth.token">
+          <a-typography-text type="secondary">登录后可与发布方沟通并提交申请。</a-typography-text>
+          <a-space style="margin-top: 12px">
+            <a-button type="primary" @click="router.push('/auth/login')">登录</a-button>
+            <a-button @click="router.push('/auth/register')">注册</a-button>
+          </a-space>
+        </a-card>
+      </aside>
     </div>
   </section>
 </template>
+
+<style scoped>
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.hero-card {
+  background: linear-gradient(135deg, #f7fbff, #ffffff);
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+.meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.meta-row {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 10px;
+  align-items: start;
+  font-size: 14px;
+}
+.meta-label {
+  color: var(--color-text-3);
+  line-height: 24px;
+}
+@media (max-width: 900px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
+<style scoped>
+.detail { max-width: 1080px; margin: 0 auto; gap: 26px; padding: 10px 0 40px; }
+.back-link { color: #737e90; font-size: 13px; width: fit-content; }
+.hero-card { background: #fff; border-radius: 4px; border-top: 4px solid #2563b5; }
+.hero-card :deep(.arco-card-body) { padding: 34px 38px; }
+.hero-card :deep(h3) { font-size: 28px; line-height: 1.5; }
+.detail-grid { grid-template-columns: minmax(0, 1fr) 310px; gap: 28px; }
+.main-col { gap: 24px; }
+.main-col :deep(.arco-card) { border: 1px solid #eef2f7; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.main-col :deep(.arco-card-header) { margin: 0 30px; padding: 25px 0 18px; height: auto; border-bottom: 1px solid #f1f5f9; }
+.main-col :deep(.arco-card-header-title) { font-size: 19px; font-weight: 700; color: #111827; border-left: 0; padding-left: 0; }
+.main-col :deep(.arco-card-body) { padding: 24px 30px 32px; }
+.main-col :deep(.arco-typography), .md, .project-document { font-size: 14px; line-height: 2; color: #4b5563; overflow-wrap: anywhere; white-space: pre-wrap; }
+.project-document h3 { font-size: 16px; margin: 24px 0 10px; color: #111827; }
+.project-document h3:first-child { margin-top: 0; }
+.project-document p { margin-bottom: 10px; }
+.side-col :deep(.arco-card) { border: 1px solid #eef2f7; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.side-col :deep(.arco-card-header) { background: #f9fafb; }
+.meta-row { grid-template-columns: 70px minmax(0,1fr); line-height: 1.8; overflow-wrap: anywhere; }
+.meta-list { gap: 20px; }
+.doc-file { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #e6ebf1; border-radius: 6px; background: #f8fafc; }
+@media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; }.hero-card :deep(.arco-card-body) { padding: 24px; }.main-col :deep(.arco-card-header) { margin: 0 20px; }.main-col :deep(.arco-card-body) { padding: 20px; } }
+</style>
+
+<style scoped>
+.hero-card { border-top: 0; background: transparent; }
+.hero-card :deep(.arco-card-body) { padding: 8px 0 18px; border-bottom: 1px solid #e1e7ee; }
+.hero-card :deep(h3) { font-size: 26px; }
+.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 18px; }
+.apply-jump { font-size: 13px; color: #2868b7; }
+.application-panel { scroll-margin-top: 24px; }
+.application-intro { color: #657386; font-size: 14px; line-height: 1.8; margin: 14px 0; }
+.application-guide { background: #f6f8fb; padding: 16px; margin: 16px 0; line-height: 1.9; font-size: 13px; }
+.application-guide > strong { display: block; margin-bottom: 8px; color: #374151; }
+.proposal-guide :deep(h2) {
+  font-size: 14px;
+  font-weight: 650;
+  color: #111827;
+  margin: 10px 0 4px;
+  padding: 0;
+  border: 0;
+  line-height: 1.5;
+}
+.proposal-guide :deep(h2:first-child) { margin-top: 0; }
+.proposal-guide :deep(p) { margin: 0; color: #6b7280; font-size: 12px; }
+.proposal-view {
+  margin: 12px 0;
+  padding: 16px 18px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  color: #374151;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.proposal-view :deep(h1),
+.proposal-view :deep(h2),
+.proposal-view :deep(h3) {
+  color: #111827;
+  margin: 0.9em 0 0.4em;
+  line-height: 1.4;
+}
+.proposal-view :deep(h2) {
+  font-size: 1.05em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid #e8edf3;
+}
+.proposal-view :deep(h2:first-child),
+.proposal-view :deep(h3:first-child) { margin-top: 0; }
+.proposal-view :deep(p) { margin: 0.45em 0; }
+.proposal-view :deep(ul),
+.proposal-view :deep(ol) { padding-left: 1.3em; margin: 0.4em 0; }
+.upload-area { display: flex; flex-direction: column; gap: 12px; border: 1px dashed #a8bdd5; border-radius: 6px; padding: 24px; overflow-wrap: anywhere; }
+.upload-area span { font-size: 12px; color: #778497; }
+.upload-area input { max-width: 100%; }
+.application-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 18px; }
+.application-actions > span { font-size: 12px; color: #778497; }
+.linkish { border: 0; background: transparent; color: #2868b7; cursor: pointer; padding: 0; font-size: 13px; }
+.publisher-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #2868b7;
+  cursor: pointer;
+  font-size: 14px;
+}
+.publisher-link span {
+  font-size: 12px;
+  color: #fff;
+  background: #2563b5;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+@media (max-width: 600px) { .application-actions { align-items: flex-start; flex-direction: column; }.upload-area { padding: 16px; } }
+</style>

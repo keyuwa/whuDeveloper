@@ -36,8 +36,20 @@ public class Task {
     @Column(nullable = false, length = 200)
     private String title;
 
+    /** TA / INTERN / RA */
     @Column(name = "role_type", nullable = false, length = 16)
-    private String roleType;
+    private String roleType = "INTERN";
+
+    /** 各任务类型内的独立序号，从 1 起。 */
+    @Column(name = "role_serial", nullable = false)
+    private Integer roleSerial;
+
+    /** 对外编号，如 TA-0001 / DEV-0001 / RA-0001。 */
+    @Column(name = "public_code", nullable = false, length = 32)
+    private String publicCode;
+
+    @Column(name = "tech_field", nullable = false, length = 64)
+    private String techField;
 
     @Column(nullable = false, length = 8)
     private String difficulty;
@@ -48,6 +60,12 @@ public class Task {
     @Column(name = "tech_stack", nullable = false, length = 300)
     private String techStack;
 
+    @Column(name = "programming_languages", nullable = false, length = 300)
+    private String programmingLanguages;
+
+    @Column(name = "support_languages", nullable = false, length = 64)
+    private String supportLanguages;
+
     @Column(name = "output_requirement", nullable = false, columnDefinition = "text")
     private String outputRequirement;
 
@@ -56,6 +74,14 @@ public class Task {
 
     @Column(name = "duration_weeks", nullable = false)
     private Integer durationWeeks;
+
+    /** TA/RA 学期或科研周期；INTERN 可为空。 */
+    @Column(name = "schedule_type", length = 32)
+    private String scheduleType;
+
+    /** 助教面向的在读身份，逗号分隔：本科生/硕士生/博士生。 */
+    @Column(name = "education_levels", length = 64)
+    private String educationLevels;
 
     @Column(name = "estimated_hours", nullable = false)
     private Integer estimatedHours;
@@ -69,11 +95,23 @@ public class Task {
     @Column(name = "stipend_text", nullable = false, length = 500)
     private String stipendText;
 
-    @Column(name = "prd_md", nullable = false, columnDefinition = "text")
+    @Column(name = "prd_md", columnDefinition = "text")
     private String prdMd;
+
+    @Column(name = "prd_file_url", length = 500)
+    private String prdFileUrl;
+
+    @Column(name = "prd_file_name", length = 255)
+    private String prdFileName;
 
     @Column(name = "tech_doc_md", columnDefinition = "text")
     private String techDocMd;
+
+    @Column(name = "tech_doc_file_url", length = 500)
+    private String techDocFileUrl;
+
+    @Column(name = "tech_doc_file_name", length = 255)
+    private String techDocFileName;
 
     @Column(nullable = false)
     private Integer quota;
@@ -96,6 +134,9 @@ public class Task {
         updatedAt = now;
         if (status == null) {
             status = "DRAFT";
+        }
+        if (roleType == null) {
+            roleType = "INTERN";
         }
     }
 

@@ -1,5 +1,6 @@
 package edu.whu.developer.project;
 
+import edu.whu.developer.ability.PointService;
 import edu.whu.developer.application.TaskApplication;
 import edu.whu.developer.auth.Role;
 import edu.whu.developer.common.AuthSupport;
@@ -7,6 +8,7 @@ import edu.whu.developer.common.AuthUser;
 import edu.whu.developer.completion.Completion;
 import edu.whu.developer.completion.CompletionRepository;
 import edu.whu.developer.notify.AuditService;
+import edu.whu.developer.notify.NotificationService;
 import edu.whu.developer.report.WeeklyReport;
 import edu.whu.developer.report.WeeklyReportRepository;
 import jakarta.validation.constraints.Max;
@@ -26,24 +28,33 @@ import java.util.List;
 @Service
 public class ProjectService {
 
-    private static final List<String> MILESTONES = List.of("对齐启动", "迭代开发", "结项验收");
+    // Application review establishes scope and design before enrollment.
+    private static final MilestoneTemplate DELIVERY = new MilestoneTemplate(
+            "开发交付", "按申请书约定完成功能，留下可审阅的代码变更。",
+            "提交：Pull Request 链接 + 自测说明");
 
     private final ProjectRepository projects;
     private final MilestoneRepository milestones;
     private final WeeklyReportRepository reports;
     private final CompletionRepository completions;
     private final AuditService audit;
+    private final NotificationService notifications;
+    private final PointService points;
 
     public ProjectService(ProjectRepository projects,
                           MilestoneRepository milestones,
                           WeeklyReportRepository reports,
                           CompletionRepository completions,
-                          AuditService audit) {
+                          AuditService audit,
+                          NotificationService notifications,
+                          PointService points) {
         this.projects = projects;
         this.milestones = milestones;
         this.reports = reports;
         this.completions = completions;
         this.audit = audit;
+        this.notifications = notifications;
+        this.points = points;
     }
 
     @Transactional
@@ -62,14 +73,7 @@ public class ProjectService {
                     project.setPublisher(application.getTask().getPublisher());
                     project.setStatus("ACTIVE");
                     projects.save(project);
-                    for (int i = 0; i < MILESTONES.size(); i++) {
-                        Milestone milestone = new Milestone();
-                        milestone.setProject(project);
-                        milestone.setSeq(i + 1);
-                        milestone.setTitle(MILESTONES.get(i));
-                        milestone.setStatus(i == 0 ? "IN_PROGRESS" : "PENDING");
-                        milestones.save(milestone);
-                    }
+                    // Scope is approved with the application; deliverables are reviewed at completion.
                     audit.record(AuthSupport.current().getId(), "PROJECT", project.getId(), "ENROLL", application.getTask().getTitle());
                     return toResponse(project);
                 });
@@ -90,11 +94,30 @@ public class ProjectService {
     }
 
     @Transactional
+    public ProjectResponse leave(Long id) {
+        AuthUser student = AuthSupport.requireRole(Role.STUDENT);
+        Project project = visible(id);
+        if (!project.getStudent().getId().equals(student.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能取消自己的项目");
+        }
+        if (!"ACTIVE".equals(project.getStatus()) && !"COMPLETING".equals(project.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前项目状态不可取消");
+        }
+        project.setStatus("TERMINATED");
+        notifications.push(
+                project.getPublisher().getId(),
+                "学生已取消协作",
+                student.getDisplayName() + " 已取消「" + project.getTask().getTitle() + "」的协作。");
+        audit.record(student.getId(), "PROJECT", project.getId(), "LEAVE", project.getTask().getTitle());
+        return toResponse(project);
+    }
+
+    @Transactional
     public ProjectResponse submitMilestone(Long projectId, Long milestoneId, MilestoneSubmit request) {
         AuthUser student = AuthSupport.requireRole(Role.STUDENT);
         Project project = visible(projectId);
         if (!project.getStudent().getId().equals(student.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有入学学生可以提交节点");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有本项目学生可以提交节点");
         }
         if ("COMPLETED".equals(project.getStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "项目已结项");
@@ -139,23 +162,30 @@ public class ProjectService {
         AuthUser student = AuthSupport.requireRole(Role.STUDENT);
         Project project = visible(projectId);
         if (!project.getStudent().getId().equals(student.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有入学学生可以提交周报");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有本项目学生可以提交周报");
         }
-        if ("COMPLETED".equals(project.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "项目已结项，不能再交周报");
+        if (!"ACTIVE".equals(project.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "项目进行中才能提交周报");
         }
-        WeeklyReport report = reports.findByProjectIdAndWeekIndex(projectId, request.weekIndex())
-                .orElseGet(WeeklyReport::new);
-        if (report.getId() != null && "SCORED".equals(report.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "这周的周报已经评分，不能修改");
-        }
+        int nextIndex = reports.findByProjectIdOrderByWeekIndexAsc(projectId).stream()
+                .mapToInt(WeeklyReport::getWeekIndex).max().orElse(0) + 1;
+        WeeklyReport report = new WeeklyReport();
         report.setProject(project);
-        report.setWeekIndex(request.weekIndex());
+        report.setWeekIndex(nextIndex);
         report.setContent(request.content().trim());
+        report.setBlockers(blank(request.blockers()));
         report.setPlan(blank(request.plan()));
+        report.setSupportNeeded(blank(request.supportNeeded()));
         report.setStatus("SUBMITTED");
         reports.save(report);
-        audit.record(student.getId(), "REPORT", report.getId(), "SUBMIT", "W" + request.weekIndex());
+        points.award(
+                student.getId(),
+                5,
+                "提交周报：第 " + nextIndex + " 周",
+                "REPORT_SUBMIT",
+                String.valueOf(report.getId()),
+                "REPORT_SUBMIT:" + report.getId());
+        audit.record(student.getId(), "REPORT", report.getId(), "SUBMIT", String.valueOf(nextIndex));
         return toResponse(project);
     }
 
@@ -164,7 +194,7 @@ public class ProjectService {
         AuthUser publisher = AuthSupport.requireRole(Role.PUBLISHER);
         Project project = visible(projectId);
         if (!project.getPublisher().getId().equals(publisher.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能给自己的项目评分");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能给自己的项目反馈周报");
         }
         WeeklyReport report = reports.findById(reportId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "周报不存在"));
@@ -175,7 +205,17 @@ public class ProjectService {
         report.setScoreComment(blank(request.comment()));
         report.setStatus("SCORED");
         report.setScoredAt(LocalDateTime.now());
-        audit.record(publisher.getId(), "REPORT", report.getId(), "SCORE", String.valueOf(request.score()));
+        String detail = request.score() == null ? "READ" : String.valueOf(request.score());
+        if (request.score() != null) {
+            points.award(
+                    project.getStudent().getId(),
+                    request.score() * 3,
+                    "周报获评 " + request.score() + " 分",
+                    "REPORT_SCORE",
+                    String.valueOf(report.getId()),
+                    "REPORT_SCORE:" + report.getId());
+        }
+        audit.record(publisher.getId(), "REPORT", report.getId(), "SCORE", detail);
         return toResponse(project);
     }
 
@@ -184,27 +224,34 @@ public class ProjectService {
         AuthUser student = AuthSupport.requireRole(Role.STUDENT);
         Project project = visible(projectId);
         if (!project.getStudent().getId().equals(student.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有入学学生可以提交结项");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有本项目学生可以提交结项");
         }
-        if (reports.findByProjectIdOrderByWeekIndexAsc(projectId).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请先提交至少一份周报");
+        String reportMd = blank(request.reportMd());
+        String reportFileUrl = blank(request.reportFileUrl());
+        if (reportMd == null && reportFileUrl == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写结项文字材料或上传 PDF");
         }
-        List<String> urls = request.prUrls().stream().map(String::trim).filter(url -> !url.isBlank()).toList();
-        if (urls.isEmpty() || urls.stream().anyMatch(url -> !url.startsWith("http://") && !url.startsWith("https://"))) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请至少填写一条 http(s) PR 链接");
+        List<String> urls = request.prUrls() == null
+                ? List.of()
+                : request.prUrls().stream().map(String::trim).filter(url -> !url.isBlank()).toList();
+        if (urls.stream().anyMatch(url -> !url.startsWith("http://") && !url.startsWith("https://"))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "代码仓库 / PR 链接须为 http(s) 地址");
         }
         Completion completion = completions.findByProjectId(projectId).orElseGet(Completion::new);
         if ("APPROVED".equals(completion.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "结项已经通过");
         }
         completion.setProject(project);
-        completion.setReportMd(request.reportMd().trim());
+        completion.setReportMd(reportMd == null ? "" : reportMd);
+        completion.setReportFileUrl(reportFileUrl);
+        completion.setReportFileName(reportFileUrl == null ? null : blank(request.reportFileName()));
         completion.setPrUrls(String.join("\n", urls));
         completion.setStatus("SUBMITTED");
         completion.setReviewNote(null);
         completions.save(completion);
         project.setStatus("COMPLETING");
-        audit.record(student.getId(), "COMPLETION", completion.getId(), "SUBMIT", urls.get(0));
+        String auditDetail = reportFileUrl != null ? reportFileUrl : "TEXT";
+        audit.record(student.getId(), "COMPLETION", completion.getId(), "SUBMIT", auditDetail);
         return toResponse(project);
     }
 
@@ -225,6 +272,13 @@ public class ProjectService {
         if ("APPROVE".equals(request.decision())) {
             completion.setStatus("APPROVED");
             project.setStatus("COMPLETED");
+            points.award(
+                    project.getStudent().getId(),
+                    50,
+                    "结项通过：「" + project.getTask().getTitle() + "」",
+                    "COMPLETION_APPROVE",
+                    String.valueOf(projectId),
+                    "COMPLETION_APPROVE:" + projectId);
             audit.record(publisher.getId(), "COMPLETION", completion.getId(), "APPROVE", null);
         } else if ("REJECT".equals(request.decision())) {
             completion.setStatus("REJECTED");
@@ -261,20 +315,47 @@ public class ProjectService {
         if (!milestone.getProject().getId().equals(projectId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "节点不存在");
         }
+        if (milestone.getSeq() < 3) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "需求与方案已在申请阶段确认，无需重复提交或评审");
+        }
         return milestone;
     }
 
     private ProjectResponse toResponse(Project project) {
         List<MilestoneView> milestoneViews = milestones.findByProjectIdOrderBySeqAsc(project.getId()).stream()
-                .map(item -> new MilestoneView(item.getId(), item.getSeq(), item.getTitle(), item.getStatus(), item.getNote(), item.getDeliverableUrl()))
+                .filter(item -> item.getSeq() >= 3)
+                .map(item -> {
+                    MilestoneTemplate template = templateFor(item.getSeq(), item.getTitle());
+                    return new MilestoneView(
+                            item.getId(),
+                            item.getSeq(),
+                            template.title(),
+                            template.goal(),
+                            template.evidence(),
+                            item.getStatus(),
+                            item.getNote(),
+                            item.getDeliverableUrl());
+                })
                 .toList();
         List<ReportView> reportViews = reports.findByProjectIdOrderByWeekIndexAsc(project.getId()).stream()
-                .map(item -> new ReportView(item.getId(), item.getWeekIndex(), item.getContent(), item.getPlan(), item.getStatus(), item.getScore(), item.getScoreComment()))
+                .map(item -> new ReportView(
+                        item.getId(),
+                        item.getWeekIndex(),
+                        item.getContent(),
+                        item.getBlockers(),
+                        item.getPlan(),
+                        item.getSupportNeeded(),
+                        item.getStatus(),
+                        item.getScore(),
+                        item.getScoreComment(),
+                        item.getCreatedAt()))
                 .toList();
         CompletionView completionView = completions.findByProjectId(project.getId())
                 .map(item -> new CompletionView(
                         item.getId(),
                         item.getReportMd(),
+                        item.getReportFileUrl(),
+                        item.getReportFileName(),
                         Arrays.stream(item.getPrUrls().split("\n")).filter(url -> !url.isBlank()).toList(),
                         item.getStatus(),
                         item.getReviewNote()))
@@ -283,6 +364,7 @@ public class ProjectService {
                 project.getId(),
                 project.getTask().getId(),
                 project.getTask().getTitle(),
+                project.getTask().getTechField(),
                 project.getTask().getRoleType(),
                 project.getStudent().getId(),
                 project.getStudent().getDisplayName(),
@@ -291,6 +373,9 @@ public class ProjectService {
                 project.getPublisher().getRealName() == null ? project.getPublisher().getDisplayName() : project.getPublisher().getRealName(),
                 project.getStatus(),
                 project.getEnrolledAt(),
+                project.getApplication().getProposalMd(),
+                project.getApplication().getId(),
+                project.getApplication().getProposalFileName(),
                 milestoneViews,
                 reportViews,
                 completionView);
@@ -305,6 +390,7 @@ public class ProjectService {
             Long taskId,
             String taskTitle,
             String taskType,
+            String taskRoleType,
             Long studentId,
             String studentName,
             String abilityLevel,
@@ -312,19 +398,58 @@ public class ProjectService {
             String publisherName,
             String status,
             LocalDateTime enrolledAt,
+            String proposalMd,
+            Long applicationId,
+            String proposalFileName,
             List<MilestoneView> milestones,
             List<ReportView> reports,
             CompletionView completion
     ) {
     }
 
-    public record MilestoneView(Long id, Integer seq, String title, String status, String note, String deliverableUrl) {
+    public record MilestoneView(
+            Long id,
+            Integer seq,
+            String title,
+            String goal,
+            String evidence,
+            String status,
+            String note,
+            String deliverableUrl
+    ) {
     }
 
-    public record ReportView(Long id, Integer weekIndex, String content, String plan, String status, Integer score, String scoreComment) {
+    private record MilestoneTemplate(String title, String goal, String evidence) {
     }
 
-    public record CompletionView(Long id, String reportMd, List<String> prUrls, String status, String reviewNote) {
+    private MilestoneTemplate templateFor(int seq, String title) {
+        return seq == 3 ? DELIVERY
+                : new MilestoneTemplate(title, "完成本阶段约定工作。", "提交：阶段说明与交付链接");
+    }
+
+    public record ReportView(
+            Long id,
+            Integer weekIndex,
+            String content,
+            String blockers,
+            String plan,
+            String supportNeeded,
+            String status,
+            Integer score,
+            String scoreComment,
+            LocalDateTime createdAt
+    ) {
+    }
+
+    public record CompletionView(
+            Long id,
+            String reportMd,
+            String reportFileUrl,
+            String reportFileName,
+            List<String> prUrls,
+            String status,
+            String reviewNote
+    ) {
     }
 
     public record MilestoneSubmit(@NotBlank(message = "请填写节点说明") @Size(max = 1000) String note, @Size(max = 500) String deliverableUrl) {
@@ -334,15 +459,22 @@ public class ProjectService {
     }
 
     public record ReportRequest(
-            @NotNull @Min(1) @Max(30) Integer weekIndex,
-            @NotBlank(message = "请填写本周工作") String content,
-            String plan
+            @NotBlank(message = "请填写本周完成") String content,
+            String blockers,
+            String plan,
+            String supportNeeded
     ) {
     }
 
-    public record ScoreRequest(@NotNull @Min(1) @Max(5) Integer score, @Size(max = 500) String comment) {
+    public record ScoreRequest(@Min(1) @Max(5) Integer score, @Size(max = 500) String comment) {
     }
 
-    public record CompletionRequest(@NotBlank(message = "请填写结项报告") String reportMd, @NotNull List<@NotBlank String> prUrls) {
+    public record CompletionRequest(
+            String reportMd,
+            @Size(max = 500) String reportFileUrl,
+            @Size(max = 255) String reportFileName,
+            List<@NotBlank String> prUrls
+    ) {
     }
 }
+

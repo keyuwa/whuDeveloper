@@ -41,6 +41,12 @@ public class TaskApplication {
     @Column(name = "proposal_md", nullable = false, columnDefinition = "text")
     private String proposalMd;
 
+    @Column(name = "proposal_file_name", length = 255)
+    private String proposalFileName;
+
+    @Column(name = "proposal_pdf", columnDefinition = "mediumblob")
+    private byte[] proposalPdf;
+
     @Column(nullable = false, length = 32)
     private String status;
 

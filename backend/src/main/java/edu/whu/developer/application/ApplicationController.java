@@ -2,7 +2,7 @@ package edu.whu.developer.application;
 
 import edu.whu.developer.application.ApplicationService.ApplicationResponse;
 import edu.whu.developer.application.ApplicationService.InterviewRequest;
-import edu.whu.developer.application.ApplicationService.ProposalRequest;
+
 import edu.whu.developer.application.ApplicationService.ReviewRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,14 +24,26 @@ public class ApplicationController {
         this.applications = applications;
     }
 
-    @PostMapping("/tasks/{taskId}/applications")
-    public ApplicationResponse submit(@PathVariable Long taskId, @Valid @RequestBody ProposalRequest request) {
-        return applications.submit(taskId, request);
+    @PostMapping(value = "/tasks/{taskId}/applications", consumes = "multipart/form-data")
+    public ApplicationResponse submit(
+            @PathVariable Long taskId,
+            @org.springframework.web.bind.annotation.RequestParam(value = "proposalText", required = false) String proposalText,
+            @org.springframework.web.bind.annotation.RequestParam(value = "file", required = false) org.springframework.web.multipart.MultipartFile file) {
+        return applications.submit(taskId, proposalText, file);
     }
 
     @GetMapping("/tasks/{taskId}/applications")
     public List<ApplicationResponse> forTask(@PathVariable Long taskId) {
         return applications.forTask(taskId);
+    }
+
+    @GetMapping(value = "/applications/{id}/proposal", produces = "application/pdf")
+    public org.springframework.http.ResponseEntity<byte[]> proposal(@PathVariable Long id) {
+        return org.springframework.http.ResponseEntity.ok()
+                .header("Cache-Control", "no-store")
+                .header("Content-Disposition", "attachment; filename=proposal.pdf")
+                .header("X-Content-Type-Options", "nosniff")
+                .body(applications.proposal(id));
     }
 
     @GetMapping("/me/applications")

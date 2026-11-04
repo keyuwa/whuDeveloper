@@ -32,8 +32,14 @@ public class Completion {
     @JoinColumn(name = "project_id", nullable = false, unique = true)
     private Project project;
 
-    @Column(name = "report_md", nullable = false, columnDefinition = "text")
+    @Column(name = "report_md", columnDefinition = "text")
     private String reportMd;
+
+    @Column(name = "report_file_url", length = 500)
+    private String reportFileUrl;
+
+    @Column(name = "report_file_name", length = 255)
+    private String reportFileName;
 
     @Column(name = "pr_urls", nullable = false, columnDefinition = "text")
     private String prUrls;

@@ -38,6 +38,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/otp/send", "/api/v1/auth/register", "/api/v1/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/tasks", "/api/v1/tasks/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/dicts", "/api/v1/dicts/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/site-config").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/ability/leaderboard", "/api/v1/ability/rubric").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/files/*").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, ex) -> write(response, HttpStatus.UNAUTHORIZED, "请先登录"))

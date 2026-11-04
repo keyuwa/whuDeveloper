@@ -39,7 +39,13 @@ public class WeeklyReport {
     private String content;
 
     @Column(columnDefinition = "text")
+    private String blockers;
+
+    @Column(columnDefinition = "text")
     private String plan;
+
+    @Column(name = "support_needed", columnDefinition = "text")
+    private String supportNeeded;
 
     @Column(nullable = false, length = 32)
     private String status;

@@ -1,56 +1,88 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
 import type { AuditEvent, Reminder } from '../types'
 
 const items = ref<Reminder[]>([])
 const audit = ref<AuditEvent[]>([])
-const info = ref('')
-const error = ref('')
+const loading = ref(false)
 
 async function load() {
   items.value = await api<Reminder[]>('/api/v1/admin/reminders')
   audit.value = await api<AuditEvent[]>('/api/v1/admin/audit')
 }
-onMounted(() => load().catch((cause) => { error.value = cause instanceof Error ? cause.message : '加载失败' }))
+
+onMounted(async () => {
+  loading.value = true
+  try {
+    await load()
+  } catch (cause) {
+    Message.error(cause instanceof Error ? cause.message : '加载失败')
+  } finally {
+    loading.value = false
+  }
+})
 
 async function scan() {
-  const result = await api<{ created: number }>('/api/v1/admin/reminders/scan', { method: 'POST' })
-  info.value = `本次新增 ${result.created} 条催办`
-  await load()
+  try {
+    const result = await api<{ created: number }>('/api/v1/admin/reminders/scan', { method: 'POST' })
+    Message.success(`本次新增 ${result.created} 条催办`)
+    await load()
+  } catch (cause) {
+    Message.error(cause instanceof Error ? cause.message : '扫描失败')
+  }
 }
+
 async function act(id: number, action: 'escalate' | 'resolve') {
-  await api(`/api/v1/admin/reminders/${id}/${action}`, { method: 'POST' })
-  await load()
+  try {
+    await api(`/api/v1/admin/reminders/${id}/${action}`, { method: 'POST' })
+    await load()
+    Message.success(action === 'escalate' ? '已升级' : '已关闭')
+  } catch (cause) {
+    Message.error(cause instanceof Error ? cause.message : '操作失败')
+  }
 }
 </script>
 
 <template>
   <section class="stack">
     <header class="page-head">
-      <div><p class="kicker">SLA queue</p><h1>催办队列</h1></div>
-      <button class="btn primary" type="button" @click="scan">立即扫描</button>
+      <div>
+        <a-typography-title :heading="4" style="margin: 0">催办队列</a-typography-title>
+        <p class="subtitle">SLA 扫描与升级处理。</p>
+      </div>
+      <a-button type="primary" @click="scan">立即扫描</a-button>
     </header>
-    <p v-if="info" class="note">{{ info }}</p>
-    <p v-if="error" class="banner">{{ error }}</p>
-    <table class="table">
-      <thead><tr><th>类型</th><th>对象</th><th>状态</th><th>键</th><th></th></tr></thead>
-      <tbody>
-        <tr v-for="item in items" :key="item.id">
-          <td>{{ item.type }}</td>
-          <td>{{ item.targetType }} #{{ item.targetId }}</td>
-          <td>{{ item.status }}</td>
-          <td>{{ item.dedupeKey }}</td>
-          <td class="actions">
-            <button class="btn" type="button" @click="act(item.id, 'escalate')">升级</button>
-            <button class="btn" type="button" @click="act(item.id, 'resolve')">关闭</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <article class="card">
-      <h2>最近审计</h2>
-      <p v-for="event in audit.slice(0, 12)" :key="event.id" class="muted">{{ event.action }} · {{ event.entityType }} #{{ event.entityId }} · {{ event.detail || '' }}</p>
-    </article>
+    <a-spin :loading="loading" style="width: 100%">
+      <a-table :data="items" :pagination="false" row-key="id">
+        <template #columns>
+          <a-table-column title="类型" data-index="type" />
+          <a-table-column title="对象">
+            <template #cell="{ record }">{{ record.targetType }} #{{ record.targetId }}</template>
+          </a-table-column>
+          <a-table-column title="状态" data-index="status" />
+          <a-table-column title="键" data-index="dedupeKey" />
+          <a-table-column title="操作">
+            <template #cell="{ record }">
+              <a-space>
+                <a-button size="mini" @click="act(record.id, 'escalate')">升级</a-button>
+                <a-button size="mini" @click="act(record.id, 'resolve')">关闭</a-button>
+              </a-space>
+            </template>
+          </a-table-column>
+        </template>
+      </a-table>
+    </a-spin>
+    <a-card title="最近审计">
+      <a-empty v-if="audit.length === 0" description="暂无审计记录" />
+      <a-list v-else :bordered="false" size="small">
+        <a-list-item v-for="event in audit.slice(0, 12)" :key="event.id">
+          <a-typography-text type="secondary">
+            {{ event.action }} · {{ event.entityType }} #{{ event.entityId }} · {{ event.detail || '' }}
+          </a-typography-text>
+        </a-list-item>
+      </a-list>
+    </a-card>
   </section>
 </template>

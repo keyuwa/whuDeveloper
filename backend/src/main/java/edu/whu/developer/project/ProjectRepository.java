@@ -14,4 +14,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     List<Project> findByPublisherIdOrderByIdDesc(Long publisherId);
 
     long countByTaskIdAndStatusNot(Long taskId, String status);
+
+    boolean existsByTaskId(Long taskId);
+
+    List<Project> findByTaskId(Long taskId);
 }

@@ -10,4 +10,6 @@ public interface WeeklyReportRepository extends JpaRepository<WeeklyReport, Long
     List<WeeklyReport> findByProjectIdOrderByWeekIndexAsc(Long projectId);
 
     Optional<WeeklyReport> findByProjectIdAndWeekIndex(Long projectId, Integer weekIndex);
+
+    void deleteByProjectId(Long projectId);
 }

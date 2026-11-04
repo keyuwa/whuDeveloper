@@ -10,7 +10,8 @@ export class ApiError extends Error {
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData
+  if (init.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   const token = localStorage.getItem('token')
   if (token) headers.set('Authorization', `Bearer ${token}`)
   let response: Response
@@ -32,5 +33,13 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch { /* ignore */ }
     throw new ApiError(response.status, message)
   }
-  return (await response.json()) as T
+  const text = await response.text()
+  if (!text) return undefined as T
+  return JSON.parse(text) as T
+}
+
+export async function uploadPdf(file: File): Promise<{ url: string; fileName: string }> {
+  const body = new FormData()
+  body.append('file', file)
+  return api<{ url: string; fileName: string }>('/api/v1/files', { method: 'POST', body })
 }
