@@ -1,5 +1,6 @@
 server:
-  port: 8080
+  # Render injects PORT (default 10000). Local runs and Compose leave it unset.
+  port: ${PORT:8080}
 
 spring:
   application:
