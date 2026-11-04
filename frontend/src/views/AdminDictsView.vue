@@ -174,7 +174,7 @@ onMounted(async () => {
         </a-card>
 
         <a-card :title="editing ? '编辑字典项' : '新增字典项'" style="margin-top: 16px">
-          <a-form layout="vertical">
+          <a-form :model="form" layout="vertical">
             <a-row :gutter="12">
               <a-col :span="12">
                 <a-form-item label="值（写入业务数据）" required>
