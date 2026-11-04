@@ -85,6 +85,19 @@ function switchTab(key: string | number) {
   else router.push('/me/workbench')
 }
 
+async function removeShortlist(taskId: number) {
+  loading.value = true
+  try {
+    await api(`/api/v1/tasks/${taskId}/shortlist`, { method: 'DELETE' })
+    shortlists.value = shortlists.value.filter((item) => item.id !== taskId)
+    Message.success('已取消备选')
+  } catch (cause) {
+    Message.error(cause instanceof Error ? cause.message : '取消失败')
+  } finally {
+    loading.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -175,33 +188,34 @@ onMounted(load)
           <a-empty description="暂无备选项目，在任务详情页可点「加入备选」" />
         </div>
         <div v-else class="task-grid">
-          <router-link
+          <div
             v-for="item in shortlists"
             :key="item.id"
             class="task-card-link"
-            :to="`/tasks/${item.id}`"
           >
             <a-card class="task-card work-card" hoverable>
               <div class="card-top">
                 <a-space wrap :size="6">
                   <a-tag color="arcoblue" size="small">{{ item.techField }}</a-tag>
                   <a-tag v-if="item.roleType === 'INTERN'" size="small">{{ item.difficulty }}</a-tag>
-                  <a-tag v-if="item.myApplicationStatus" size="small">
-                    {{ item.myApplicationStatus === 'SUBMITTED' ? '已申请' : item.myApplicationStatus === 'ACCEPTED' ? '已通过' : '申请未通过' }}
-                  </a-tag>
-                  <a-tag v-else size="small">备选中</a-tag>
+                  <a-tag size="small">备选中</a-tag>
                 </a-space>
               </div>
-              <a-typography-title :heading="6" style="margin: 14px 0 10px">{{ item.title }}</a-typography-title>
+              <a-typography-title :heading="6" style="margin: 14px 0 10px">
+                <router-link class="title-link" :to="`/tasks/${item.id}`">{{ item.title }}</router-link>
+              </a-typography-title>
               <div class="card-meta">
                 <span>发布方 {{ item.publisherName }}</span>
                 <span>{{ item.durationWeeks }} 周</span>
               </div>
-              <div class="card-foot">
-                <span>查看详情 →</span>
+              <div class="card-foot candidate-actions">
+                <a-button size="mini" status="danger" type="outline" :loading="loading" @click="removeShortlist(item.id)">
+                  取消备选
+                </a-button>
+                <router-link class="detail-link" :to="`/tasks/${item.id}`">查看详情 →</router-link>
               </div>
             </a-card>
-          </router-link>
+          </div>
         </div>
       </template>
     </a-spin>
@@ -231,5 +245,9 @@ onMounted(load)
 .work-card :deep(h6) { grid-column: 1; font-size: 17px; line-height: 1.5; font-weight: 700; }
 .card-meta { grid-column: 1; display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: #6b7280; line-height: 1.7; }
 .card-foot { grid-column: 2; grid-row: 1 / 4; display: flex; align-items: center; font-size: 13px; color: #2563eb; font-weight: 600; }
-@media (max-width: 600px) { .work-card :deep(.arco-card-body) { padding: 18px; display: block; }.card-foot { margin-top: 16px; }.page-head { align-items: flex-start; }.subtitle { max-width: 220px; } }
+.candidate-actions { flex-direction: column; justify-content: center; gap: 10px; align-items: flex-end; }
+.title-link { color: inherit; text-decoration: none; }
+.title-link:hover { color: #2563eb; }
+.detail-link { color: #2563eb; font-weight: 600; text-decoration: none; white-space: nowrap; }
+@media (max-width: 600px) { .work-card :deep(.arco-card-body) { padding: 18px; display: block; }.card-foot { margin-top: 16px; }.candidate-actions { align-items: flex-start; }.page-head { align-items: flex-start; }.subtitle { max-width: 220px; } }
 </style>

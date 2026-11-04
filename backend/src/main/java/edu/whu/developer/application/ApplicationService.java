@@ -12,6 +12,7 @@ import edu.whu.developer.notify.AuditService;
 import edu.whu.developer.notify.NotificationService;
 import edu.whu.developer.project.ProjectRepository;
 import edu.whu.developer.project.ProjectService;
+import edu.whu.developer.shortlist.TaskShortlistRepository;
 import edu.whu.developer.task.Task;
 import edu.whu.developer.task.TaskRepository;
 import jakarta.validation.constraints.NotBlank;
@@ -32,6 +33,7 @@ public class ApplicationService {
     private final UserRepository users;
     private final ProjectRepository projects;
     private final ProjectService projectService;
+    private final TaskShortlistRepository shortlists;
     private final NotificationService notifications;
     private final MailService mail;
     private final AuditService audit;
@@ -42,6 +44,7 @@ public class ApplicationService {
                               UserRepository users,
                               ProjectRepository projects,
                               ProjectService projectService,
+                              TaskShortlistRepository shortlists,
                               NotificationService notifications,
                               MailService mail,
                               AuditService audit,
@@ -51,6 +54,7 @@ public class ApplicationService {
         this.users = users;
         this.projects = projects;
         this.projectService = projectService;
+        this.shortlists = shortlists;
         this.points = points;
         this.notifications = notifications;
         this.mail = mail;
@@ -95,6 +99,7 @@ public class ApplicationService {
         }
         application.setStatus("SUBMITTED");
         applications.save(application);
+        shortlists.deleteByStudentIdAndTaskId(student.getId(), taskId);
         notifications.push(task.getPublisher().getId(), "新的申请书", student.getDisplayName() + " 申请了「" + task.getTitle() + "」");
         audit.record(student.getId(), "APPLICATION", application.getId(), "SUBMIT", task.getTitle());
         return toResponse(application);

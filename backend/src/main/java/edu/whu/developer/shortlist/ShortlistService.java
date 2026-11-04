@@ -3,6 +3,7 @@ package edu.whu.developer.shortlist;
 import edu.whu.developer.auth.Role;
 import edu.whu.developer.auth.User;
 import edu.whu.developer.auth.UserRepository;
+import edu.whu.developer.application.TaskApplicationRepository;
 import edu.whu.developer.common.AuthSupport;
 import edu.whu.developer.common.AuthUser;
 import edu.whu.developer.notify.AuditService;
@@ -23,17 +24,20 @@ public class ShortlistService {
     private final TaskShortlistRepository shortlists;
     private final TaskRepository tasks;
     private final UserRepository users;
+    private final TaskApplicationRepository applications;
     private final TaskService taskService;
     private final AuditService audit;
 
     public ShortlistService(TaskShortlistRepository shortlists,
                             TaskRepository tasks,
                             UserRepository users,
+                            TaskApplicationRepository applications,
                             TaskService taskService,
                             AuditService audit) {
         this.shortlists = shortlists;
         this.tasks = tasks;
         this.users = users;
+        this.applications = applications;
         this.taskService = taskService;
         this.audit = audit;
     }
@@ -43,6 +47,7 @@ public class ShortlistService {
         AuthUser student = AuthSupport.requireRole(Role.STUDENT);
         return shortlists.findByStudentIdOrderByIdDesc(student.getId()).stream()
                 .filter(item -> "OPEN".equals(item.getTask().getStatus()))
+                .filter(item -> applications.findByTaskIdAndStudentId(item.getTask().getId(), student.getId()).isEmpty())
                 .map(item -> taskService.get(item.getTask().getId()))
                 .toList();
     }
@@ -53,6 +58,9 @@ public class ShortlistService {
         Task task = tasks.findById(taskId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在"));
         if (!"OPEN".equals(task.getStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "只能将开放中的项目加入备选");
+        }
+        if (applications.findByTaskIdAndStudentId(taskId, student.getId()).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "已申请的项目无需加入备选");
         }
         if (!shortlists.existsByStudentIdAndTaskId(student.getId(), taskId)) {
             User studentEntity = users.findById(student.getId()).orElseThrow();
