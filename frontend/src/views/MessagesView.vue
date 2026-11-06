@@ -4,10 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
 import { api } from '../api'
 import { auth } from '../auth'
+import { useIsMobile } from '../composables/useDevice'
 import type { ChatMessage, Task, ThreadSummary } from '../types'
 
 const route = useRoute()
 const router = useRouter()
+const isMobile = useIsMobile()
 const threads = ref<ThreadSummary[]>([])
 const messages = ref<ChatMessage[]>([])
 const draft = ref('')
@@ -18,6 +20,8 @@ const activeStudentId = ref<number | null>(null)
 
 const isStudent = computed(() => auth.user?.role === 'STUDENT')
 const isPublisher = computed(() => auth.user?.role === 'PUBLISHER')
+const showChatPane = computed(() => !isMobile.value || Boolean(activeTaskId.value))
+const showThreadPane = computed(() => !isMobile.value || !activeTaskId.value)
 
 const activeThread = computed(() =>
   threads.value.find(
@@ -94,12 +98,23 @@ function deleteThread(item: ThreadSummary, event: Event) {
   })
 }
 
+function clearActiveChat() {
+  activeTaskId.value = null
+  activeStudentId.value = null
+  messages.value = []
+  void router.replace({ path: '/messages' })
+}
+
 async function openFromQuery() {
   const taskRaw = route.query.taskId
   const studentRaw = route.query.studentId
   const taskId = typeof taskRaw === 'string' ? Number(taskRaw) : NaN
   if (!Number.isFinite(taskId)) {
-    if (threads.value.length && !activeTaskId.value) {
+    activeTaskId.value = null
+    activeStudentId.value = null
+    messages.value = []
+    // Desktop: auto-open first thread. Mobile: stay on list.
+    if (!isMobile.value && threads.value.length) {
       await selectThread(threads.value[0])
     }
     return
@@ -191,10 +206,10 @@ watch(
 </script>
 
 <template>
-  <section class="messages-page">
+  <section class="messages-page" :class="{ 'messages-mobile': isMobile }">
     <a-spin :loading="loading" class="chat-shell-spin">
-      <div class="chat-shell">
-        <aside class="thread-pane">
+      <div class="chat-shell" :class="{ 'mobile-mode': isMobile }">
+        <aside v-if="showThreadPane" class="thread-pane">
           <div class="pane-title">会话</div>
           <a-empty v-if="!loading && threads.length === 0" description="还没有对话，去任务详情点发布方开聊" />
           <div
@@ -219,13 +234,16 @@ watch(
           </div>
         </aside>
 
-        <div class="chat-pane">
+        <div v-if="showChatPane" class="chat-pane">
           <template v-if="activeTaskId">
             <div class="chat-header">
-              <div>
-                <strong>{{ peerName || '对话' }}</strong>
-                <div class="chat-task">
-                  <router-link :to="`/tasks/${activeTaskId}`">{{ activeThread?.taskTitle || `任务 #${activeTaskId}` }}</router-link>
+              <div class="chat-header-main">
+                <button v-if="isMobile" type="button" class="back-chat" @click="clearActiveChat">← 返回</button>
+                <div>
+                  <strong>{{ peerName || '对话' }}</strong>
+                  <div class="chat-task">
+                    <router-link :to="`/tasks/${activeTaskId}`">{{ activeThread?.taskTitle || `任务 #${activeTaskId}` }}</router-link>
+                  </div>
                 </div>
               </div>
               <a-button size="small" @click="router.push(`/tasks/${activeTaskId}`)">查看任务</a-button>
@@ -447,22 +465,43 @@ watch(
   place-items: center;
   background: transparent;
 }
+.chat-header-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.back-chat {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 2px 0;
+  cursor: pointer;
+  flex: none;
+}
+.chat-shell.mobile-mode {
+  grid-template-columns: 1fr;
+  min-height: calc(100vh - 120px);
+}
+.messages-mobile .thread-pane {
+  max-height: none;
+  border-right: 0;
+  padding-right: 0;
+}
+.messages-mobile .chat-pane {
+  padding-left: 0;
+  min-height: calc(100vh - 110px);
+  max-height: calc(100vh - 110px);
+}
+.messages-mobile .thread-delete {
+  opacity: 1;
+}
 @media (max-width: 800px) {
-  .chat-shell {
+  .chat-shell:not(.mobile-mode) {
     grid-template-columns: 1fr;
     min-height: auto;
-  }
-  .thread-pane {
-    max-height: 220px;
-    border-right: 0;
-    border-bottom: 1px solid #eef2f7;
-    padding-right: 0;
-    margin-bottom: 12px;
-  }
-  .chat-pane {
-    padding-left: 0;
-    min-height: 420px;
-    max-height: none;
   }
 }
 </style>

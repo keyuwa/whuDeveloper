@@ -4,8 +4,11 @@ import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
 import { auth } from '../auth'
+import { useIsMobile } from '../composables/useDevice'
 import { loadDicts, dictOptions, scheduleLabelMap } from '../composables/useDicts'
-import { TASK_ROLE_TYPES, type Task } from '../types'
+import { TASK_ROLE_LABEL, TASK_ROLE_TYPES, type Task } from '../types'
+
+const isMobile = useIsMobile()
 
 type FilterKey =
   | 'techFields'
@@ -27,6 +30,7 @@ const router = useRouter()
 const sourceTasks = ref<Task[]>([])
 const loading = ref(false)
 const activeModule = ref<'TA' | 'INTERN' | 'RA'>('INTERN')
+const filterDrawerVisible = ref(false)
 const tutorialDocUrl = ref('')
 const tutorialBannerText = ref('系统使用教程请参考平台文档，点击查看完整说明。')
 const filters = reactive({
@@ -65,6 +69,41 @@ const activeModuleMeta = computed(() => modules.find((item) => item.value === ac
 const isIntern = computed(() => activeModule.value === 'INTERN')
 const isTa = computed(() => activeModule.value === 'TA')
 const isRa = computed(() => activeModule.value === 'RA')
+
+interface FilterSection {
+  key: FilterKey
+  label: string
+  options: { label: string; value: string }[]
+}
+
+const filterSections = computed<FilterSection[]>(() => {
+  const support: FilterSection = {
+    key: 'supportLanguages',
+    label: '支持语言',
+    options: supportOptions.value,
+  }
+  if (isIntern.value) {
+    return [
+      { key: 'durations', label: '开发周期', options: durationOptions.value },
+      { key: 'techFields', label: '技术领域', options: techOptions.value },
+      { key: 'programmingLanguages', label: '编程语言', options: languageOptions.value },
+      support,
+    ]
+  }
+  if (isTa.value) {
+    return [
+      { key: 'scheduleTypes', label: '学期', options: taScheduleOptions.value },
+      { key: 'weeklyHours', label: '每周投入', options: weeklyOptions.value },
+      { key: 'educationLevels', label: '在读身份', options: educationOptions.value },
+      support,
+    ]
+  }
+  return [
+    { key: 'scheduleTypes', label: '科研周期', options: raScheduleOptions.value },
+    { key: 'techFields', label: '研究方向', options: techOptions.value },
+    support,
+  ]
+})
 
 function inRange(value: number, range: string) {
   const [min, max] = range.split('-').map(Number)
@@ -155,6 +194,10 @@ const selectedChips = computed<SelectedChip[]>(() => {
   return chips
 })
 
+const selectedFilterCount = computed(
+  () => selectedChips.value.filter((chip) => chip.key !== 'keyword').length,
+)
+
 function isSelected(key: FilterKey, value: string) {
   return filters[key].includes(value)
 }
@@ -222,7 +265,20 @@ async function switchModule(value: 'TA' | 'INTERN' | 'RA') {
   if (activeModule.value === value) return
   activeModule.value = value
   resetFilters()
+  filterDrawerVisible.value = false
   await loadModuleList()
+}
+
+function openFilterDrawer() {
+  filterDrawerVisible.value = true
+}
+
+function applyFilterDrawer() {
+  filterDrawerVisible.value = false
+}
+
+function resetFiltersInDrawer() {
+  resetFilters()
 }
 
 function openTask(task: Task) {
@@ -264,8 +320,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="plaza">
-    <div class="hero">
+  <section class="plaza" :class="{ 'plaza-mobile': isMobile }">
+    <div v-if="!isMobile" class="hero">
       <div class="hero-main">
         <div class="hero-copy">
           <p class="eyebrow">WHU TOP Developer</p>
@@ -312,21 +368,24 @@ onMounted(async () => {
         <span class="tutorial-link">查看文档 ↗</span>
       </a>
     </div>
-    <div class="path-strip">
+    <div v-if="!isMobile" class="path-strip">
       <span><b>01</b> 筛选感兴趣的项目</span>
       <span><b>02</b> 沟通并提交申请</span>
       <span><b>03</b> 入项协作并完成</span>
     </div>
 
-    <header id="opportunities" class="page-head">
+    <header v-if="!isMobile" id="opportunities" class="page-head">
       <div>
         <a-typography-title :heading="4" style="margin: 0">任务广场</a-typography-title>
         <p class="subtitle">先选频道；每个频道使用各自适配的筛选条件。</p>
       </div>
       <a-typography-text type="secondary">本频道 {{ resultCount }} 个项目</a-typography-text>
     </header>
+    <div v-else class="mobile-plaza-head">
+      <p class="mobile-count">{{ resultCount }} 个开放职位</p>
+    </div>
 
-    <nav class="module-tabs" aria-label="任务频道">
+    <nav class="module-tabs" :class="{ compact: isMobile }" aria-label="任务频道">
       <button
         v-for="item in modules"
         :key="item.value"
@@ -336,190 +395,159 @@ onMounted(async () => {
         @click="switchModule(item.value)"
       >
         <span class="module-name">{{ item.label }}</span>
-        <span class="module-blurb">{{ item.blurb }}</span>
+        <span v-if="!isMobile" class="module-blurb">{{ item.blurb }}</span>
       </button>
     </nav>
-    <p class="module-hint">{{ activeModuleMeta.blurb }}</p>
+    <p v-if="!isMobile" class="module-hint">{{ activeModuleMeta.blurb }}</p>
 
-    <section class="filter-panel">
-      <template v-if="isIntern">
-        <div class="filter-row">
-          <span class="filter-label">开发周期</span>
-          <div class="chip-group">
-            <button
-              v-for="item in durationOptions"
-              :key="`du-${item.value}`"
-              type="button"
-              class="chip"
-              :class="{ active: isSelected('durations', item.value) }"
-              @click="toggleFilter('durations', item.value)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
-        </div>
-        <div class="filter-row">
-          <span class="filter-label">技术领域</span>
+    <!-- Desktop filters -->
+    <section v-if="!isMobile" class="filter-panel">
+      <div class="filter-body">
+        <div v-for="section in filterSections" :key="section.key" class="filter-row">
+          <span class="filter-label">{{ section.label }}</span>
           <div class="chip-group wrap">
             <button
-              v-for="item in techOptions"
-              :key="`t-${item.value}`"
+              v-for="item in section.options"
+              :key="`${section.key}-${item.value}`"
               type="button"
               class="chip"
-              :class="{ active: isSelected('techFields', item.value) }"
-              @click="toggleFilter('techFields', item.value)"
+              :class="{ active: isSelected(section.key, item.value) }"
+              @click="toggleFilter(section.key, item.value)"
             >
               {{ item.label }}
             </button>
           </div>
         </div>
-        <div class="filter-row">
-          <span class="filter-label">编程语言</span>
-          <div class="chip-group wrap">
+        <div class="filter-row tools">
+          <span class="filter-label">关键词</span>
+          <div class="tool-group">
+            <a-input
+              v-model="filters.keyword"
+              allow-clear
+              placeholder="搜索标题 / 发布方"
+              style="width: min(280px, 100%)"
+            />
+            <a-button @click="resetFilters">清空已选</a-button>
+          </div>
+        </div>
+        <div class="selected-bar">
+          <span class="selected-label">已选</span>
+          <div v-if="selectedChips.length" class="selected-chips">
             <button
-              v-for="item in languageOptions"
-              :key="`pl-${item.value}`"
+              v-for="chip in selectedChips"
+              :key="`${chip.key}-${chip.value}`"
               type="button"
-              class="chip"
-              :class="{ active: isSelected('programmingLanguages', item.value) }"
-              @click="toggleFilter('programmingLanguages', item.value)"
+              class="selected-chip"
+              @click="removeChip(chip)"
             >
-              {{ item.label }}
+              <span>{{ chip.group }} · {{ chip.label }}</span>
+              <span class="selected-x">×</span>
             </button>
           </div>
-        </div>
-      </template>
-
-      <template v-else-if="isTa">
-        <div class="filter-row">
-          <span class="filter-label">学期</span>
-          <div class="chip-group">
-            <button
-              v-for="item in taScheduleOptions"
-              :key="`ta-${item.value}`"
-              type="button"
-              class="chip"
-              :class="{ active: isSelected('scheduleTypes', item.value) }"
-              @click="toggleFilter('scheduleTypes', item.value)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
-        </div>
-        <div class="filter-row">
-          <span class="filter-label">每周投入</span>
-          <div class="chip-group">
-            <button
-              v-for="item in weeklyOptions"
-              :key="`wh-${item.value}`"
-              type="button"
-              class="chip"
-              :class="{ active: isSelected('weeklyHours', item.value) }"
-              @click="toggleFilter('weeklyHours', item.value)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
-        </div>
-        <div class="filter-row">
-          <span class="filter-label">在读身份</span>
-          <div class="chip-group">
-            <button
-              v-for="item in educationOptions"
-              :key="`edu-${item.value}`"
-              type="button"
-              class="chip"
-              :class="{ active: isSelected('educationLevels', item.value) }"
-              @click="toggleFilter('educationLevels', item.value)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
-        </div>
-      </template>
-
-      <template v-else>
-        <div class="filter-row">
-          <span class="filter-label">科研周期</span>
-          <div class="chip-group">
-            <button
-              v-for="item in raScheduleOptions"
-              :key="`ra-${item.value}`"
-              type="button"
-              class="chip"
-              :class="{ active: isSelected('scheduleTypes', item.value) }"
-              @click="toggleFilter('scheduleTypes', item.value)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
-        </div>
-        <div class="filter-row">
-          <span class="filter-label">研究方向</span>
-          <div class="chip-group wrap">
-            <button
-              v-for="item in techOptions"
-              :key="`rt-${item.value}`"
-              type="button"
-              class="chip"
-              :class="{ active: isSelected('techFields', item.value) }"
-              @click="toggleFilter('techFields', item.value)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
-        </div>
-      </template>
-
-      <div class="filter-row">
-        <span class="filter-label">支持语言</span>
-        <div class="chip-group">
-          <button
-            v-for="item in supportOptions"
-            :key="`s-${item.value}`"
-            type="button"
-            class="chip"
-            :class="{ active: isSelected('supportLanguages', item.value) }"
-            @click="toggleFilter('supportLanguages', item.value)"
-          >
-            {{ item.label }}
-          </button>
+          <span v-else class="selected-empty">暂无筛选条件，点击上方选项可多选</span>
         </div>
       </div>
+    </section>
 
-      <div class="filter-row tools">
-        <span class="filter-label">关键词</span>
-        <div class="tool-group">
-          <a-input
-            v-model="filters.keyword"
-            allow-clear
-            placeholder="搜索标题 / 发布方"
-            style="width: min(280px, 100%)"
-          />
-          <a-button @click="resetFilters">清空已选</a-button>
-        </div>
+    <!-- Mobile filter entry + bottom drawer -->
+    <section v-else class="mobile-filter-entry">
+      <div class="mobile-filter-bar">
+        <button type="button" class="filter-toggle" :class="{ active: selectedFilterCount > 0 }" @click="openFilterDrawer">
+          <span>筛选</span>
+          <span v-if="selectedFilterCount" class="filter-count">{{ selectedFilterCount }}</span>
+        </button>
+        <a-input
+          v-model="filters.keyword"
+          allow-clear
+          size="small"
+          placeholder="搜索标题 / 发布方"
+          class="mobile-filter-search"
+        />
+      </div>
+      <div v-if="selectedFilterCount" class="mobile-selected-row">
+        <button
+          v-for="chip in selectedChips.filter((item) => item.key !== 'keyword')"
+          :key="`${chip.key}-${chip.value}`"
+          type="button"
+          class="selected-chip"
+          @click="removeChip(chip)"
+        >
+          <span>{{ chip.label }}</span>
+          <span class="selected-x">×</span>
+        </button>
       </div>
 
-      <div class="selected-bar">
-        <span class="selected-label">已选</span>
-        <div v-if="selectedChips.length" class="selected-chips">
-          <button
-            v-for="chip in selectedChips"
-            :key="`${chip.key}-${chip.value}`"
-            type="button"
-            class="selected-chip"
-            @click="removeChip(chip)"
-          >
-            <span>{{ chip.group }} · {{ chip.label }}</span>
-            <span class="selected-x">×</span>
-          </button>
+      <a-drawer
+        v-model:visible="filterDrawerVisible"
+        placement="bottom"
+        height="78%"
+        :footer="false"
+        :header="false"
+        unmount-on-close
+        class="filter-drawer"
+      >
+        <div class="filter-drawer-inner">
+          <div class="drawer-head">
+            <strong>筛选条件</strong>
+            <button type="button" class="drawer-close" @click="filterDrawerVisible = false">关闭</button>
+          </div>
+          <div class="drawer-body">
+            <section v-for="section in filterSections" :key="`m-${section.key}`" class="drawer-section">
+              <h3>{{ section.label }}</h3>
+              <div class="chip-group wrap">
+                <button
+                  v-for="item in section.options"
+                  :key="`m-${section.key}-${item.value}`"
+                  type="button"
+                  class="chip"
+                  :class="{ active: isSelected(section.key, item.value) }"
+                  @click="toggleFilter(section.key, item.value)"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
+            </section>
+          </div>
+          <div class="drawer-foot">
+            <a-button size="large" @click="resetFiltersInDrawer">重置</a-button>
+            <a-button type="primary" size="large" long @click="applyFilterDrawer">
+              查看结果（{{ resultCount }}）
+            </a-button>
+          </div>
         </div>
-        <span v-else class="selected-empty">暂无筛选条件，点击上方选项可多选</span>
-      </div>
+      </a-drawer>
     </section>
 
     <a-spin :loading="loading" class="list-spin">
       <a-empty v-if="!loading && tasks.length === 0" description="没有匹配的任务，请调整筛选条件" />
+      <div v-else-if="tasks.length && isMobile" class="job-cards">
+        <article
+          v-for="task in tasks"
+          :key="task.id"
+          class="job-card"
+          role="button"
+          tabindex="0"
+          @click="openTask(task)"
+          @keydown.enter="openTask(task)"
+        >
+          <div class="job-card-top">
+            <a-tag size="small" color="arcoblue">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
+            <span class="job-code mono">{{ taskCode(task) }}</span>
+          </div>
+          <h3 class="job-title">{{ task.title }}</h3>
+          <p class="job-meta">
+            <template v-if="isIntern">{{ task.techField }} · {{ durationLabel(task.durationWeeks) }}</template>
+            <template v-else-if="isTa">{{ scheduleLabel(task) }} · {{ task.estimatedHours }}h/周</template>
+            <template v-else>{{ task.techField }} · {{ scheduleLabel(task) }}</template>
+          </p>
+          <div class="job-foot">
+            <button type="button" class="publisher-chip" @click="openPublisherChat(task, $event)">
+              {{ task.publisherName }}
+            </button>
+            <span class="seat">名额 {{ seatLabel(task) }}</span>
+          </div>
+        </article>
+      </div>
       <div v-else-if="tasks.length" class="table-wrap">
         <table class="project-table">
           <thead>
@@ -781,51 +809,60 @@ onMounted(async () => {
 .tutorial-link { flex: none; font-size: 12px; color: #2563eb; white-space: nowrap; font-weight: 600; }
 
 .filter-panel {
-  margin-bottom: 18px;
-  padding: 18px 20px;
+  margin-bottom: 22px;
+  padding: 22px 24px 20px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0;
+}
+.filter-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 .filter-row {
   display: grid;
-  grid-template-columns: 72px 1fr;
-  gap: 12px;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 16px 20px;
   align-items: start;
 }
 .filter-label {
-  padding-top: 6px;
-  color: var(--muted);
+  padding-top: 8px;
+  color: #6b7280;
   font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
   white-space: nowrap;
 }
 .chip-group {
   display: flex;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 10px;
   overflow-x: auto;
   padding-bottom: 2px;
 }
 .chip-group.wrap {
   flex-wrap: wrap;
+  gap: 10px 12px;
   overflow: visible;
 }
 .chip {
-  border: 1px solid var(--line);
-  background: #f7f9fc;
+  border: 1px solid #e5eaf0;
+  background: #f8fafc;
   color: #334155;
   border-radius: 999px;
-  padding: 6px 14px;
+  padding: 8px 16px;
   font-size: 13px;
+  line-height: 1.3;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.chip:hover { border-color: #93c5fd; }
+.chip:hover { border-color: #93c5fd; background: #eff6ff; }
 .chip.active {
   background: #2563eb;
   border-color: #2563eb;
@@ -842,8 +879,11 @@ onMounted(async () => {
   align-items: flex-start;
   gap: 12px;
   margin-top: 4px;
-  padding-top: 14px;
+  padding-top: 16px;
   border-top: 1px dashed var(--line);
+}
+.filter-row.tools {
+  padding-top: 4px;
 }
 .selected-label {
   flex: 0 0 auto;
@@ -991,4 +1031,187 @@ onMounted(async () => {
   .path-strip { flex-wrap: wrap; gap: 12px; }
   .page-head { align-items: start; flex-direction: column; }
 }
+.module-tabs.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.module-tabs.compact .module-tab {
+  padding: 10px 8px;
+  border-radius: 12px;
+  text-align: center;
+}
+.module-tabs.compact .module-name { font-size: 13px; }
+.mobile-plaza-head { margin-bottom: 10px; }
+.mobile-count { margin: 0; color: #6b7280; font-size: 13px; }
+.mobile-filter-entry {
+  margin-bottom: 12px;
+}
+.mobile-filter-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 14px;
+}
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-toggle.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+.filter-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+.filter-toggle:not(.active) .filter-count {
+  background: #2563eb;
+  color: #fff;
+}
+.mobile-filter-search { width: 100%; }
+.mobile-selected-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 2px 0;
+}
+.mobile-selected-row .selected-chip {
+  flex: none;
+}
+.filter-drawer-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 60vh;
+}
+.drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0 14px;
+  border-bottom: 1px solid #eef2f7;
+  flex: none;
+}
+.drawer-head strong {
+  font-size: 16px;
+}
+.drawer-close {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 0;
+}
+.drawer-body {
+  flex: 1;
+  padding: 4px 0 12px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.drawer-section {
+  padding: 14px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.drawer-section:last-child {
+  border-bottom: 0;
+}
+.drawer-section h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+.drawer-section .chip-group.wrap {
+  gap: 8px;
+}
+.drawer-foot {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  padding: 12px 0 calc(4px + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1px solid #eef2f7;
+}
+:deep(.filter-drawer .arco-drawer-body) {
+  padding: 12px 16px 8px;
+  height: 100%;
+}
+.job-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.job-card {
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+}
+.job-card:active { background: #f8fafc; }
+.job-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.job-code { font-size: 12px; }
+.job-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  line-height: 1.45;
+  color: #111827;
+}
+.job-meta {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+.job-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.publisher-chip {
+  border: 0;
+  background: #eff6ff;
+  color: #2563eb;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.seat { font-size: 12px; color: #9ca3af; }
 </style>

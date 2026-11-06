@@ -19,5 +19,9 @@ public interface TaskApplicationRepository extends JpaRepository<TaskApplication
 
     boolean existsByTaskId(Long taskId);
 
+    long countByTaskIdAndStatus(Long taskId, String status);
+
+    long countByTask_Publisher_IdAndStatus(Long publisherId, String status);
+
     void deleteByTaskId(Long taskId);
 }

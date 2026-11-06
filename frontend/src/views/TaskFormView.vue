@@ -3,11 +3,13 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal, type RequestOption } from '@arco-design/web-vue'
 import { api, uploadPdf } from '../api'
+import { useIsMobile } from '../composables/useDevice'
 import { dictItems, dictOptions, loadDicts } from '../composables/useDicts'
 import { TASK_ROLE_TYPES, type Task } from '../types'
 
 const route = useRoute()
 const router = useRouter()
+const isMobile = useIsMobile()
 const formRef = ref()
 const loading = ref(false)
 const taskStatus = ref<string | null>(null)
@@ -243,6 +245,14 @@ async function save(publish: boolean) {
 
 <template>
   <a-card :title="route.params.id ? '编辑项目' : '发布项目'">
+    <a-alert
+      v-if="isMobile"
+      type="info"
+      style="margin-bottom: 16px"
+      title="建议使用电脑填写"
+    >
+      手机端可查看与轻量编辑；完整发岗字段较多，推荐在电脑浏览器完成。
+    </a-alert>
     <a-form ref="formRef" :model="form" layout="vertical">
       <a-form-item field="title" label="项目名称" :rules="[{ required: true, message: '请填写名称' }]">
         <a-input v-model="form.title" />

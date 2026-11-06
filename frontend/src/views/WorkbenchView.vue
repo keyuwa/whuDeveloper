@@ -3,10 +3,12 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
+import { useIsMobile } from '../composables/useDevice'
 import type { Application, Project, Task } from '../types'
 
 const route = useRoute()
 const router = useRouter()
+const isMobile = useIsMobile()
 const projects = ref<Project[]>([])
 const applications = ref<Application[]>([])
 const shortlists = ref<Task[]>([])
@@ -102,16 +104,19 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="workbench">
-    <header class="page-head">
+  <section class="workbench" :class="{ 'workbench-mobile': isMobile }">
+    <header v-if="!isMobile" class="page-head">
       <div>
         <a-typography-title :heading="4" style="margin: 0">工作台</a-typography-title>
         <p class="subtitle">已接项目、已投申请与备选收藏，分栏查看进度。</p>
       </div>
       <router-link to="/" class="discover-link">探索新项目 ↗</router-link>
     </header>
+    <div v-else class="mobile-wb-head">
+      <router-link to="/" class="discover-link">探索新项目 ↗</router-link>
+    </div>
 
-    <a-tabs class="workspace-tabs" :active-key="tab" type="line" size="large" @change="switchTab">
+    <a-tabs class="workspace-tabs" :active-key="tab" type="rounded" :size="isMobile ? 'medium' : 'large'" @change="switchTab">
       <a-tab-pane key="enrolled" :title="`已接项目 · ${activeProjects.length}`" />
       <a-tab-pane key="applications" :title="`已申请 · ${pendingApplications.length}`" />
       <a-tab-pane key="candidates" :title="`备选项目 · ${shortlists.length}`" />
@@ -249,5 +254,26 @@ onMounted(load)
 .title-link { color: inherit; text-decoration: none; }
 .title-link:hover { color: #2563eb; }
 .detail-link { color: #2563eb; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.mobile-wb-head {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.workbench-mobile .work-card :deep(.arco-card-body) {
+  padding: 16px;
+  display: block;
+}
+.workbench-mobile .card-foot {
+  margin-top: 14px;
+  justify-content: flex-start;
+}
+.workbench-mobile .candidate-actions {
+  align-items: stretch;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.workbench-mobile :deep(.arco-tabs-nav-tab) {
+  font-size: 13px;
+}
 @media (max-width: 600px) { .work-card :deep(.arco-card-body) { padding: 18px; display: block; }.card-foot { margin-top: 16px; }.candidate-actions { align-items: flex-start; }.page-head { align-items: flex-start; }.subtitle { max-width: 220px; } }
 </style>

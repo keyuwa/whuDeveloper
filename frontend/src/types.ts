@@ -50,6 +50,7 @@ export interface Task {
   techDocFileName: string | null
   quota: number
   filled: number
+  pendingApplications?: number
   status: string
   publisherId: number
   publisherName: string

@@ -69,6 +69,7 @@ public final class TaskDtos {
             String techDocFileName,
             Integer quota,
             long filled,
+            long pendingApplications,
             String status,
             Long publisherId,
             String publisherName,

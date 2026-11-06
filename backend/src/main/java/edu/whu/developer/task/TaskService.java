@@ -382,6 +382,7 @@ public class TaskService {
                 task.getTechDocFileName(),
                 task.getQuota(),
                 projects.countByTaskIdAndStatusNot(task.getId(), "TERMINATED"),
+                applications.countByTaskIdAndStatus(task.getId(), "SUBMITTED"),
                 task.getStatus(),
                 task.getPublisher().getId(),
                 task.getPublisher().getRealName() == null ? task.getPublisher().getDisplayName() : task.getPublisher().getRealName(),

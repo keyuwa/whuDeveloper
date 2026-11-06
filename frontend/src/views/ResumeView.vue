@@ -3,8 +3,11 @@ import { onMounted, reactive, ref } from 'vue'
 import { Message, type RequestOption } from '@arco-design/web-vue'
 import { api, uploadPdf } from '../api'
 import { auth, setSession } from '../auth'
+import { useIsMobile } from '../composables/useDevice'
 import { dictItems, loadDicts } from '../composables/useDicts'
 import type { User } from '../types'
+
+const isMobile = useIsMobile()
 
 const identityOptions = dictItems('STUDENT_IDENTITY')
 
@@ -107,11 +110,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="resume-page">
+  <section class="resume-page" :class="{ 'resume-mobile': isMobile }">
     <header class="page-head">
       <div>
-        <h1 class="page-title">我的简历</h1>
-        <p class="subtitle">完善后才可投递项目申请。PDF 附件可选。</p>
+        <h1 class="page-title">{{ isMobile ? '简历' : '我的简历' }}</h1>
+        <p v-if="!isMobile" class="subtitle">完善后才可投递项目申请。PDF 附件可选。</p>
       </div>
       <a-tag v-if="auth.user?.resumeReady" color="green" size="small">已完善</a-tag>
       <a-tag v-else color="orangered" size="small">待完善</a-tag>
@@ -119,6 +122,47 @@ onMounted(async () => {
 
     <a-spin :loading="loading" style="width: 100%">
       <a-form :model="form" layout="vertical" class="resume-form">
+        <a-collapse v-if="isMobile" :default-active-key="['base', 'bio', 'file']" :bordered="false" class="resume-collapse">
+          <a-collapse-item key="base" header="基本信息">
+            <a-form-item label="真实姓名" required>
+              <a-input v-model="form.realName" placeholder="与学籍一致" size="large" />
+            </a-form-item>
+            <a-form-item label="在读身份" required>
+              <a-select v-model="form.studentIdentity" size="large">
+                <a-option v-for="item in identityOptions" :key="item.value" :value="item.value">{{ item.label }}</a-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item label="学校" required>
+              <a-input v-model="form.school" placeholder="例如 武汉大学" size="large" />
+            </a-form-item>
+            <a-form-item label="学院" required>
+              <a-input v-model="form.college" placeholder="例如 计算机学院" size="large" />
+            </a-form-item>
+            <a-form-item label="专业" required>
+              <a-input v-model="form.major" placeholder="例如 软件工程" size="large" />
+            </a-form-item>
+          </a-collapse-item>
+          <a-collapse-item key="bio" header="个人简介">
+            <a-textarea
+              v-model="form.bio"
+              :auto-size="{ minRows: 5, maxRows: 12 }"
+              placeholder="介绍学习经历、项目经验、可投入时间等，至少 20 字"
+            />
+          </a-collapse-item>
+          <a-collapse-item key="file" header="简历附件（可选）">
+            <div class="upload-row">
+              <a-upload :custom-request="onUpload" :show-file-list="false" accept=".pdf,application/pdf">
+                <a-button>上传 PDF</a-button>
+              </a-upload>
+              <div v-if="form.resumeFileUrl" class="file-row">
+                <a :href="form.resumeFileUrl" target="_blank" rel="noopener">{{ form.resumeFileName || '查看附件' }}</a>
+                <button type="button" class="linkish" @click="clearFile">移除</button>
+              </div>
+            </div>
+          </a-collapse-item>
+        </a-collapse>
+
+        <template v-else>
         <div class="form-section">
           <h2 class="section-title">基本信息</h2>
           <a-row :gutter="20">
@@ -178,8 +222,10 @@ onMounted(async () => {
           </a-form-item>
         </div>
 
-        <div class="form-actions">
-          <a-button type="primary" size="large" :loading="saving" @click="save">保存简历</a-button>
+        </template>
+
+        <div class="form-actions" :class="{ sticky: isMobile }">
+          <a-button type="primary" size="large" long :loading="saving" @click="save">保存简历</a-button>
         </div>
       </a-form>
     </a-spin>
@@ -265,5 +311,26 @@ onMounted(async () => {
 }
 .form-actions {
   padding-top: 12px;
+}
+.resume-collapse {
+  background: transparent;
+  margin-bottom: 12px;
+}
+.resume-collapse :deep(.arco-collapse-item-content) {
+  padding: 4px 0 12px;
+}
+.resume-mobile .page-title {
+  font-size: 20px;
+}
+.resume-mobile .page-head {
+  margin-bottom: 16px;
+  align-items: center;
+}
+.form-actions.sticky {
+  position: sticky;
+  bottom: 72px;
+  z-index: 20;
+  padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, transparent, #f9fafb 30%);
 }
 </style>

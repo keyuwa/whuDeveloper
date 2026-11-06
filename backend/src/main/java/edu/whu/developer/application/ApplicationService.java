@@ -127,6 +127,12 @@ public class ApplicationService {
         return applications.findByTask_Publisher_IdOrderByIdDesc(publisher.getId()).stream().map(this::toResponse).toList();
     }
 
+    @Transactional(readOnly = true)
+    public long publisherPendingCount() {
+        AuthUser publisher = AuthSupport.requireRole(Role.PUBLISHER);
+        return applications.countByTask_Publisher_IdAndStatus(publisher.getId(), "SUBMITTED");
+    }
+
     @Transactional
     public ApplicationResponse review(Long id, ReviewRequest request) {
         AuthUser publisher = AuthSupport.requireRole(Role.PUBLISHER);

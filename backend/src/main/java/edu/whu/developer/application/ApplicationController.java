@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -54,6 +55,11 @@ public class ApplicationController {
     @GetMapping("/publisher/applications")
     public List<ApplicationResponse> inbox() {
         return applications.publisherInbox();
+    }
+
+    @GetMapping("/publisher/applications/pending-count")
+    public Map<String, Long> pendingCount() {
+        return Map.of("count", applications.publisherPendingCount());
     }
 
     @PostMapping("/applications/{id}/review")

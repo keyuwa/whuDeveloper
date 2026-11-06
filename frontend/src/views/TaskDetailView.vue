@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
 import { auth, setSession } from '../auth'
+import { useIsMobile } from '../composables/useDevice'
 import { loadDicts, scheduleLabelMap } from '../composables/useDicts'
 import { renderMarkdown } from '../markdown'
 import { PROPOSAL_TEMPLATE, TASK_ROLE_LABEL, type Application, type Task, type User } from '../types'
@@ -14,6 +15,7 @@ import { routeId } from '../format'
 
 const route = useRoute()
 const router = useRouter()
+const isMobile = useIsMobile()
 const task = ref<Task | null>(null)
 const proposalText = ref('')
 const proposalFile = ref<File | null>(null)
@@ -145,7 +147,7 @@ async function startChat() {
 </script>
 
 <template>
-  <section v-if="task" class="detail">
+  <section v-if="task" class="detail" :class="{ 'detail-mobile': isMobile, 'has-mobile-cta': isMobile && isStudent }">
     <router-link to="/" class="back-link">← 返回项目广场</router-link>
     <a-card class="hero-card" :bordered="false">
       <a-typography-title :heading="3" style="margin: 0 0 12px">{{ task.title }}</a-typography-title>
@@ -156,7 +158,7 @@ async function startChat() {
         <a-tag color="green" size="large">{{ task.supportLanguages }} · 支持语言</a-tag>
         <a-tag size="large">名额 {{ task.filled }}/{{ task.quota }}</a-tag>
       </a-space>
-      <div v-if="isStudent" class="hero-actions">
+      <div v-if="isStudent && !isMobile" class="hero-actions">
         <a-button type="primary" :loading="loading" @click="startChat">立即沟通</a-button>
         <a-button
           v-if="task.status === 'OPEN' && !task.projectId"
@@ -170,7 +172,7 @@ async function startChat() {
       </div>
     </a-card>
 
-    <div class="detail-grid">
+    <div class="detail-grid" :class="{ stacked: isMobile }">
       <div class="main-col stack">
         <a-card title="项目介绍">
           <a-typography-paragraph>{{ task.background }}</a-typography-paragraph>
@@ -324,6 +326,25 @@ async function startChat() {
         </a-card>
       </aside>
     </div>
+
+    <div v-if="isMobile && isStudent" class="mobile-cta-bar">
+      <a-button
+        v-if="task.status === 'OPEN' && !task.projectId"
+        :type="task.shortlisted ? 'outline' : 'secondary'"
+        :loading="loading"
+        @click="toggleShortlist"
+      >
+        {{ task.shortlisted ? '已备选' : '备选' }}
+      </a-button>
+      <a-button :loading="loading" @click="startChat">沟通</a-button>
+      <a-button
+        type="primary"
+        :disabled="Boolean(task.myApplicationId) || task.status !== 'OPEN'"
+        @click="router.push({ hash: '#apply' })"
+      >
+        {{ task.myApplicationId ? '已申请' : '立即申请' }}
+      </a-button>
+    </div>
   </section>
 </template>
 
@@ -462,4 +483,20 @@ async function startChat() {
   padding: 1px 6px;
 }
 @media (max-width: 600px) { .application-actions { align-items: flex-start; flex-direction: column; }.upload-area { padding: 16px; } }
+.detail-grid.stacked { grid-template-columns: 1fr !important; }
+.detail-mobile.has-mobile-cta { padding-bottom: 88px; }
+.mobile-cta-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 55;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.98);
+  border-top: 1px solid #eef2f7;
+  box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.06);
+}
 </style>

@@ -11,6 +11,7 @@ import ProjectMilestonesView from './views/project/ProjectMilestonesView.vue'
 import ProjectCompletionView from './views/project/ProjectCompletionView.vue'
 import MessagesView from './views/MessagesView.vue'
 import ResumeView from './views/ResumeView.vue'
+import MeHomeView from './views/MeHomeView.vue'
 import PublisherTasksView from './views/PublisherTasksView.vue'
 import TaskFormView from './views/TaskFormView.vue'
 import PublisherInboxView from './views/PublisherInboxView.vue'
@@ -34,6 +35,7 @@ export const router = createRouter({
     { path: '/auth/register', component: RegisterView },
     { path: '/me/applications', redirect: '/me/workbench/applications' },
     { path: '/me/projects', redirect: '/me/workbench' },
+    { path: '/me', component: MeHomeView, meta: { role: 'STUDENT' } },
     { path: '/me/resume', component: ResumeView, meta: { role: 'STUDENT' } },
     { path: '/me/workbench', component: WorkbenchView, meta: { role: 'STUDENT' } },
     { path: '/me/workbench/applications', component: WorkbenchView, meta: { role: 'STUDENT' } },

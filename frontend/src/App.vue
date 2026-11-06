@@ -5,6 +5,7 @@ import { Message, Modal } from '@arco-design/web-vue'
 import { IconDelete, IconNotification } from '@arco-design/web-vue/es/icon'
 import { api } from './api'
 import { auth, logout } from './auth'
+import { provideDevice } from './composables/useDevice'
 
 interface NotificationItem {
   id: number
@@ -14,22 +15,31 @@ interface NotificationItem {
   createdAt: string
 }
 
+interface TabItem {
+  key: string
+  label: string
+  match?: (path: string) => boolean
+}
+
 const route = useRoute()
 const router = useRouter()
+const { isMobile } = provideDevice()
 const unread = ref(0)
+const pendingApplications = ref(0)
 const drawerVisible = ref(false)
 const notifications = ref<NotificationItem[]>([])
 const loadingNotifications = ref(false)
 const user = computed(() => auth.user)
+
 const selectedKeys = computed(() => {
   const path = route.path
-  if (path.startsWith('/me/resume')) return ['/me/resume']
+  if (path.startsWith('/me/resume') || path === '/me') return ['/me']
   if (path.startsWith('/me/workbench') || path.startsWith('/me/projects') || path.startsWith('/me/applications')) {
     return ['/me/workbench']
   }
   if (path.startsWith('/ability')) return ['/ability']
   if (path.startsWith('/publisher/tasks')) return ['/publisher/tasks']
-  if (path.startsWith('/publisher/projects')) return ['/publisher/inbox']
+  if (path.startsWith('/publisher/inbox') || path.startsWith('/publisher/projects')) return ['/publisher/inbox']
   if (path.startsWith('/admin/')) {
     const hit = adminMenus.find((item) => path.startsWith(item.key))
     return hit ? [hit.key] : [path]
@@ -43,13 +53,16 @@ const studentMenus = [
   { key: '/ability', label: 'Top Dev' },
   { key: '/messages', label: '私信' },
 ]
-const publisherMenus = [
+const publisherMenus = computed(() => [
   { key: '/', label: '任务广场' },
   { key: '/publisher/tasks', label: '我的任务' },
-  { key: '/publisher/inbox', label: '审阅' },
+  {
+    key: '/publisher/inbox',
+    label: pendingApplications.value > 0 ? `审阅 (${pendingApplications.value})` : '审阅',
+  },
   { key: '/ability', label: 'Top Dev' },
   { key: '/messages', label: '私信' },
-]
+])
 const adminMenus = [
   { key: '/', label: '任务广场' },
   { key: '/ability', label: 'Top Dev' },
@@ -66,14 +79,107 @@ const guestMenus = [
 
 const menus = computed(() => {
   if (user.value?.role === 'STUDENT') return studentMenus
-  if (user.value?.role === 'PUBLISHER') return publisherMenus
+  if (user.value?.role === 'PUBLISHER') return publisherMenus.value
   if (user.value?.role === 'ADMIN') return adminMenus
   return guestMenus
 })
 
+const studentTabs: TabItem[] = [
+  { key: '/', label: '职位', match: (path) => path === '/' },
+  { key: '/ability', label: 'Top Dev', match: (path) => path.startsWith('/ability') },
+  {
+    key: '/me/workbench',
+    label: '工作台',
+    match: (path) => path.startsWith('/me/workbench') || path.startsWith('/me/projects'),
+  },
+  {
+    key: '/me',
+    label: '我的',
+    match: (path) =>
+      path === '/me' || path.startsWith('/me/resume') || path.startsWith('/messages'),
+  },
+]
+
+const publisherTabs = computed<TabItem[]>(() => [
+  { key: '/', label: '职位', match: (path) => path === '/' },
+  { key: '/publisher/tasks', label: '任务', match: (path) => path.startsWith('/publisher/tasks') },
+  {
+    key: '/publisher/inbox',
+    label: pendingApplications.value > 0 ? `审阅·${pendingApplications.value}` : '审阅',
+    match: (path) => path.startsWith('/publisher/inbox') || path.startsWith('/publisher/projects'),
+  },
+  { key: '/messages', label: '消息', match: (path) => path.startsWith('/messages') },
+])
+
+const guestTabs: TabItem[] = [
+  { key: '/', label: '职位', match: (path) => path === '/' },
+  { key: '/ability', label: '能力', match: (path) => path.startsWith('/ability') },
+  { key: '/auth/login', label: '登录', match: (path) => path.startsWith('/auth') },
+]
+
+const mobileTabs = computed(() => {
+  if (user.value?.role === 'STUDENT') return studentTabs
+  if (user.value?.role === 'PUBLISHER') return publisherTabs.value
+  if (user.value?.role === 'ADMIN') {
+    return [
+      { key: '/', label: '广场', match: (path: string) => path === '/' },
+      { key: '/admin/tasks', label: '任务', match: (path: string) => path.startsWith('/admin/tasks') },
+      { key: '/admin/users', label: '用户', match: (path: string) => path.startsWith('/admin/users') },
+      { key: '/admin/settings', label: '设置', match: (path: string) => path.startsWith('/admin/') },
+    ]
+  }
+  return guestTabs
+})
+
+const activeTabKey = computed(() => {
+  const path = route.path
+  const hit = mobileTabs.value.find((item) => (item.match ? item.match(path) : path === item.key))
+  return hit?.key || ''
+})
+
+const hideMobileTab = computed(() => {
+  const path = route.path
+  if (path.startsWith('/tasks/')) return true
+  if (path.startsWith('/me/projects/')) return true
+  if (path.startsWith('/publisher/projects/')) return true
+  if (path === '/publisher/tasks/new' || /^\/publisher\/tasks\/\d+/.test(path)) return true
+  if (path.startsWith('/auth/')) return true
+  if (path === '/ability/rubric') return true
+  if (path.startsWith('/messages') && route.query.taskId) return true
+  return false
+})
+
+const mobileTitle = computed(() => {
+  const path = route.path
+  if (path === '/') return '职位'
+  if (path.startsWith('/messages')) return '消息'
+  if (path.startsWith('/me/workbench')) return '工作台'
+  if (path === '/me' || path.startsWith('/me/resume')) return '我的'
+  if (path.startsWith('/publisher/tasks')) return '我的任务'
+  if (path.startsWith('/publisher/inbox')) return '审阅'
+  if (path.startsWith('/ability')) return 'Top Dev'
+  if (path.startsWith('/tasks/')) return '职位详情'
+  return 'WHU TOP'
+})
+
+async function refreshPendingApplications() {
+  if (!auth.token || auth.user?.role !== 'PUBLISHER') {
+    pendingApplications.value = 0
+    return
+  }
+  try {
+    pendingApplications.value = (
+      await api<{ count: number }>('/api/v1/publisher/applications/pending-count')
+    ).count
+  } catch {
+    pendingApplications.value = 0
+  }
+}
+
 async function refreshUnread() {
   if (!auth.token) {
     unread.value = 0
+    pendingApplications.value = 0
     return
   }
   try {
@@ -81,6 +187,7 @@ async function refreshUnread() {
   } catch {
     unread.value = 0
   }
+  await refreshPendingApplications()
 }
 
 async function loadNotifications() {
@@ -162,6 +269,9 @@ watch(() => auth.token, refreshUnread)
 watch(() => route.fullPath, () => {
   if (!drawerVisible.value) refreshUnread()
 })
+watch(isMobile, (mobile) => {
+  document.documentElement.classList.toggle('is-mobile', mobile)
+})
 
 function onMenuClick(key: string) {
   router.push(key)
@@ -170,6 +280,7 @@ function onMenuClick(key: string) {
 function onLogout() {
   logout()
   unread.value = 0
+  pendingApplications.value = 0
   notifications.value = []
   drawerVisible.value = false
   router.push('/auth/login')
@@ -181,8 +292,9 @@ function formatTime(value: string) {
 </script>
 
 <template>
-  <a-layout style="min-height: 100vh; background: var(--bg-page, #f9fafb)">
-    <a-layout-header :style="{ background: '#fff', borderBottom: '1px solid #eef2f7', padding: 0, height: 'auto', boxShadow: '0 1px 0 rgba(15,23,42,0.03)' }">
+  <a-layout class="app-shell" :class="{ mobile: isMobile, 'tab-pad': isMobile && !hideMobileTab }">
+    <!-- Desktop header -->
+    <a-layout-header v-if="!isMobile" class="desktop-header">
       <div class="layout-header-inner">
         <router-link to="/" class="brand-link">
           <span class="brand-mark">WHU</span>
@@ -203,7 +315,7 @@ function formatTime(value: string) {
           </a-menu>
         </div>
 
-        <div class="header-actions" v-if="user">
+        <div v-if="user" class="header-actions">
           <a-button
             v-if="user.role === 'STUDENT'"
             type="text"
@@ -231,23 +343,50 @@ function formatTime(value: string) {
           </a-badge>
           <a-button size="small" @click="onLogout">退出</a-button>
         </div>
-        <div class="header-actions" v-else>
+        <div v-else class="header-actions">
           <a-button type="text" @click="router.push('/auth/login')">登录</a-button>
           <a-button type="primary" @click="router.push('/auth/register')">注册</a-button>
         </div>
       </div>
     </a-layout-header>
 
+    <!-- Mobile compact header -->
+    <header v-else class="mobile-header">
+      <div class="mobile-title">{{ mobileTitle }}</div>
+      <div class="mobile-header-actions">
+        <a-badge v-if="user" :count="unread" :max-count="99">
+          <a-button type="text" shape="circle" size="small" @click="openNotifications">
+            <icon-notification />
+          </a-button>
+        </a-badge>
+        <a-button v-if="!user" type="text" size="small" @click="router.push('/auth/login')">登录</a-button>
+      </div>
+    </header>
+
     <a-layout-content>
-      <div class="page">
+      <div class="page" :class="{ 'page-mobile': isMobile }">
         <router-view />
       </div>
     </a-layout-content>
 
+    <!-- Mobile bottom tabs -->
+    <nav v-if="isMobile && !hideMobileTab" class="mobile-tabbar" aria-label="主导航">
+      <button
+        v-for="item in mobileTabs"
+        :key="item.key"
+        type="button"
+        class="tab-item"
+        :class="{ active: activeTabKey === item.key }"
+        @click="router.push(item.key)"
+      >
+        {{ item.label }}
+      </button>
+    </nav>
+
     <a-drawer
       v-model:visible="drawerVisible"
       title="通知中心"
-      :width="420"
+      :width="isMobile ? '100%' : 420"
       unmount-on-close
     >
       <template #footer>
@@ -296,6 +435,17 @@ function formatTime(value: string) {
 </template>
 
 <style scoped>
+.app-shell {
+  min-height: 100vh;
+  background: var(--bg-page, #f9fafb);
+}
+.desktop-header {
+  background: #fff;
+  border-bottom: 1px solid #eef2f7;
+  padding: 0;
+  height: auto;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
 .resume-link {
   color: #4b5563;
   font-weight: 500;
@@ -316,5 +466,63 @@ function formatTime(value: string) {
 }
 .notification-item.unread {
   background: var(--color-primary-light-1);
+}
+
+.mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #eef2f7;
+}
+.mobile-title {
+  font-size: 17px;
+  font-weight: 750;
+  color: #111827;
+}
+.mobile-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.page-mobile {
+  padding: 12px 12px 24px !important;
+}
+.app-shell.tab-pad .page-mobile {
+  padding-bottom: 88px !important;
+}
+.mobile-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  min-height: 56px;
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.98);
+  border-top: 1px solid #eef2f7;
+  box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.04);
+}
+.tab-item {
+  border: 0;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 8px 4px;
+  cursor: pointer;
+}
+.tab-item.active {
+  color: #2563eb;
 }
 </style>
