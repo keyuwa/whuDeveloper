@@ -387,7 +387,7 @@ async function startChat() {
 </style>
 
 <style scoped>
-.detail { max-width: 1080px; margin: 0 auto; gap: 26px; padding: 10px 0 40px; }
+.detail { max-width: 1080px; width: 100%; margin: 0 auto; gap: 26px; padding: 10px 0 40px; box-sizing: border-box; }
 .back-link { color: #737e90; font-size: 13px; width: fit-content; }
 .hero-card { background: #fff; border-radius: 4px; border-top: 4px solid #2563b5; }
 .hero-card :deep(.arco-card-body) { padding: 34px 38px; }
@@ -483,20 +483,41 @@ async function startChat() {
   padding: 1px 6px;
 }
 @media (max-width: 600px) { .application-actions { align-items: flex-start; flex-direction: column; }.upload-area { padding: 16px; } }
-.detail-grid.stacked { grid-template-columns: 1fr !important; }
-.detail-mobile.has-mobile-cta { padding-bottom: 88px; }
+.detail-grid { min-width: 0; width: 100%; }
+.detail-grid.stacked { grid-template-columns: minmax(0, 1fr) !important; }
+.main-col,
+.side-col {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+.detail-mobile :deep(.arco-card) {
+  max-width: 100%;
+}
+.doc-file a {
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.detail-mobile.has-mobile-cta { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
 .mobile-cta-bar {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
+  width: 100%;
+  max-width: 100vw;
+  box-sizing: border-box;
   z-index: 55;
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto auto minmax(0, 1fr);
   gap: 8px;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
   background: rgba(255, 255, 255, 0.98);
   border-top: 1px solid #eef2f7;
   box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.06);
+}
+.mobile-cta-bar :deep(.arco-btn) {
+  min-width: 0;
 }
 </style>

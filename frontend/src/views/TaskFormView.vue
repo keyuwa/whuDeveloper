@@ -294,23 +294,31 @@ async function save(publish: boolean) {
           <a-checkbox v-for="item in educationOptions" :key="item.value" :value="item.value">{{ item.label }}</a-checkbox>
         </a-checkbox-group>
       </a-form-item>
-      <a-row :gutter="12">
-        <a-col :span="8">
-          <a-form-item label="名额"><a-input-number v-model="form.quota" :min="1" style="width: 100%" /></a-form-item>
+      <a-row :gutter="[16, 8]" class="meta-row">
+        <a-col :xs="24" :sm="12" :lg="8">
+          <a-form-item label="名额">
+            <a-input-number v-model="form.quota" :min="1" style="width: 100%" />
+          </a-form-item>
         </a-col>
-        <a-col v-if="isIntern" :span="8">
-          <a-form-item label="开发周期（周）"><a-input-number v-model="form.durationWeeks" :min="1" style="width: 100%" /></a-form-item>
+        <a-col v-if="isIntern" :xs="24" :sm="12" :lg="8">
+          <a-form-item label="开发周期">
+            <a-input-number v-model="form.durationWeeks" :min="1" style="width: 100%">
+              <template #suffix>周</template>
+            </a-input-number>
+          </a-form-item>
         </a-col>
-        <a-col v-else :span="8">
+        <a-col v-else :xs="24" :sm="12" :lg="8">
           <a-form-item :label="isTa ? '学期' : '科研周期'" required>
             <a-select v-model="form.scheduleType" placeholder="请选择">
               <a-option v-for="item in scheduleOptions" :key="item.value" :value="item.value">{{ item.label }}</a-option>
             </a-select>
           </a-form-item>
         </a-col>
-        <a-col :span="8">
-          <a-form-item :label="isTa ? '每周投入（小时）' : '每周工时'">
-            <a-input-number v-model="form.estimatedHours" :min="1" style="width: 100%" />
+        <a-col :xs="24" :sm="12" :lg="8">
+          <a-form-item label="每周投入">
+            <a-input-number v-model="form.estimatedHours" :min="1" style="width: 100%">
+              <template #suffix>小时</template>
+            </a-input-number>
           </a-form-item>
         </a-col>
       </a-row>
@@ -577,6 +585,15 @@ async function save(publish: boolean) {
   display: flex;
   gap: 10px;
   flex-shrink: 0;
+}
+.meta-row :deep(.arco-form-item-label) {
+  white-space: nowrap;
+  min-height: 22px;
+}
+.meta-row :deep(.arco-input-suffix) {
+  color: var(--color-text-3);
+  font-size: 13px;
+  padding: 0 8px;
 }
 @media (max-width: 800px) {
   .doc-grid,
