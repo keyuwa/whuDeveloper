@@ -15,9 +15,12 @@ interface NotificationItem {
   createdAt: string
 }
 
+type TabIcon = 'jobs' | 'topdev' | 'workbench' | 'me' | 'tasks' | 'inbox' | 'messages' | 'login' | 'users' | 'settings'
+
 interface TabItem {
   key: string
   label: string
+  icon: TabIcon
   match?: (path: string) => boolean
 }
 
@@ -85,36 +88,39 @@ const menus = computed(() => {
 })
 
 const studentTabs: TabItem[] = [
-  { key: '/', label: '职位', match: (path) => path === '/' },
-  { key: '/ability', label: 'Top Dev', match: (path) => path.startsWith('/ability') },
+  { key: '/', label: '职位', icon: 'jobs', match: (path) => path === '/' },
+  { key: '/ability', label: 'Top Dev', icon: 'topdev', match: (path) => path.startsWith('/ability') },
   {
     key: '/me/workbench',
     label: '工作台',
+    icon: 'workbench',
     match: (path) => path.startsWith('/me/workbench') || path.startsWith('/me/projects'),
   },
   {
     key: '/me',
     label: '我的',
+    icon: 'me',
     match: (path) =>
       path === '/me' || path.startsWith('/me/resume') || path.startsWith('/messages'),
   },
 ]
 
 const publisherTabs = computed<TabItem[]>(() => [
-  { key: '/', label: '职位', match: (path) => path === '/' },
-  { key: '/publisher/tasks', label: '任务', match: (path) => path.startsWith('/publisher/tasks') },
+  { key: '/', label: '职位', icon: 'jobs', match: (path) => path === '/' },
+  { key: '/publisher/tasks', label: '任务', icon: 'tasks', match: (path) => path.startsWith('/publisher/tasks') },
   {
     key: '/publisher/inbox',
     label: pendingApplications.value > 0 ? `审阅·${pendingApplications.value}` : '审阅',
+    icon: 'inbox',
     match: (path) => path.startsWith('/publisher/inbox') || path.startsWith('/publisher/projects'),
   },
-  { key: '/messages', label: '消息', match: (path) => path.startsWith('/messages') },
+  { key: '/messages', label: '消息', icon: 'messages', match: (path) => path.startsWith('/messages') },
 ])
 
 const guestTabs: TabItem[] = [
-  { key: '/', label: '职位', match: (path) => path === '/' },
-  { key: '/ability', label: '能力', match: (path) => path.startsWith('/ability') },
-  { key: '/auth/login', label: '登录', match: (path) => path.startsWith('/auth') },
+  { key: '/', label: '职位', icon: 'jobs', match: (path) => path === '/' },
+  { key: '/ability', label: '能力', icon: 'topdev', match: (path) => path.startsWith('/ability') },
+  { key: '/auth/login', label: '登录', icon: 'login', match: (path) => path.startsWith('/auth') },
 ]
 
 const mobileTabs = computed(() => {
@@ -122,10 +128,10 @@ const mobileTabs = computed(() => {
   if (user.value?.role === 'PUBLISHER') return publisherTabs.value
   if (user.value?.role === 'ADMIN') {
     return [
-      { key: '/', label: '广场', match: (path: string) => path === '/' },
-      { key: '/admin/tasks', label: '任务', match: (path: string) => path.startsWith('/admin/tasks') },
-      { key: '/admin/users', label: '用户', match: (path: string) => path.startsWith('/admin/users') },
-      { key: '/admin/settings', label: '设置', match: (path: string) => path.startsWith('/admin/') },
+      { key: '/', label: '广场', icon: 'jobs' as const, match: (path: string) => path === '/' },
+      { key: '/admin/tasks', label: '任务', icon: 'tasks' as const, match: (path: string) => path.startsWith('/admin/tasks') },
+      { key: '/admin/users', label: '用户', icon: 'users' as const, match: (path: string) => path.startsWith('/admin/users') },
+      { key: '/admin/settings', label: '设置', icon: 'settings' as const, match: (path: string) => path.startsWith('/admin/') },
     ]
   }
   return guestTabs
@@ -373,7 +379,12 @@ function formatTime(value: string) {
     </a-layout-content>
 
     <!-- Mobile bottom tabs -->
-    <nav v-if="isMobile && !hideMobileTab" class="mobile-tabbar" aria-label="主导航">
+    <nav
+      v-if="isMobile && !hideMobileTab"
+      class="mobile-tabbar"
+      aria-label="主导航"
+      :style="{ gridTemplateColumns: `repeat(${mobileTabs.length}, 1fr)` }"
+    >
       <button
         v-for="item in mobileTabs"
         :key="item.key"
@@ -382,7 +393,104 @@ function formatTime(value: string) {
         :class="{ active: activeTabKey === item.key }"
         @click="router.push(item.key)"
       >
-        {{ item.label }}
+        <span class="tab-icon" aria-hidden="true">
+          <!-- 职位 / 广场 -->
+          <svg v-if="item.icon === 'jobs'" viewBox="0 0 24 24" width="22" height="22">
+            <path
+              d="M8 7V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v1h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3zm2-1h4v1h-4V6z"
+              :fill="activeTabKey === item.key ? 'currentColor' : 'none'"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <!-- Top Dev / 能力 -->
+          <svg v-else-if="item.icon === 'topdev'" viewBox="0 0 24 24" width="22" height="22">
+            <path
+              d="M12 3l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.9 7.2 18l.9-5.4L4.2 8.7l5.4-.8L12 3z"
+              :fill="activeTabKey === item.key ? 'currentColor' : 'none'"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <!-- 工作台 -->
+          <svg v-else-if="item.icon === 'workbench'" viewBox="0 0 24 24" width="22" height="22">
+            <path
+              d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z"
+              :fill="activeTabKey === item.key ? 'currentColor' : 'none'"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <!-- 我的 / 登录 -->
+          <svg v-else-if="item.icon === 'me' || item.icon === 'login'" viewBox="0 0 24 24" width="22" height="22">
+            <circle
+              cx="12"
+              cy="8"
+              r="3.2"
+              :fill="activeTabKey === item.key ? 'currentColor' : 'none'"
+              stroke="currentColor"
+              stroke-width="1.7"
+            />
+            <path
+              d="M5 19.2c1.8-3 4.1-4.5 7-4.5s5.2 1.5 7 4.5"
+              :fill="activeTabKey === item.key ? 'currentColor' : 'none'"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+            />
+          </svg>
+          <!-- 任务 -->
+          <svg v-else-if="item.icon === 'tasks'" viewBox="0 0 24 24" width="22" height="22">
+            <path
+              d="M8 4h8a2 2 0 0 1 2 2v14l-6-2.5L6 20V6a2 2 0 0 1 2-2z"
+              :fill="activeTabKey === item.key ? 'currentColor' : 'none'"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <!-- 审阅 -->
+          <svg v-else-if="item.icon === 'inbox'" viewBox="0 0 24 24" width="22" height="22">
+            <path
+              d="M4 6h16v12H4V6zm0 7h4.2l1.3 2h5l1.3-2H20"
+              :fill="activeTabKey === item.key ? 'currentColor' : 'none'"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <!-- 消息 -->
+          <svg v-else-if="item.icon === 'messages'" viewBox="0 0 24 24" width="22" height="22">
+            <path
+              d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"
+              :fill="activeTabKey === item.key ? 'currentColor' : 'none'"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <!-- 用户 -->
+          <svg v-else-if="item.icon === 'users'" viewBox="0 0 24 24" width="22" height="22">
+            <circle cx="9" cy="9" r="3" :fill="activeTabKey === item.key ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.7" />
+            <circle cx="16.5" cy="10.5" r="2.4" :fill="activeTabKey === item.key ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.7" />
+            <path d="M3.5 19c1.4-2.4 3.2-3.6 5.5-3.6s4.1 1.2 5.5 3.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+          </svg>
+          <!-- 设置 -->
+          <svg v-else viewBox="0 0 24 24" width="22" height="22">
+            <circle cx="12" cy="12" r="3" :fill="activeTabKey === item.key ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.7" />
+            <path
+              d="M12 3.5v2.2m0 12.6v2.2M4.9 6.5l1.6 1.6m11 11 1.6 1.6M3.5 12h2.2m12.6 0h2.2M4.9 17.5l1.6-1.6m11-11 1.6-1.6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+            />
+          </svg>
+        </span>
+        <span class="tab-label">{{ item.label }}</span>
       </button>
     </nav>
 
@@ -504,7 +612,7 @@ function formatTime(value: string) {
   padding: 12px 12px 24px !important;
 }
 .app-shell.tab-pad .page-mobile {
-  padding-bottom: 88px !important;
+  padding-bottom: calc(56px + var(--bottom-inset, 0px)) !important;
 }
 .mobile-tabbar {
   position: fixed;
@@ -515,8 +623,8 @@ function formatTime(value: string) {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0;
-  min-height: 56px;
-  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  min-height: 50px;
+  padding: 4px 0 calc(4px + var(--bottom-inset, 0px));
   background: rgba(255, 255, 255, 0.98);
   border-top: 1px solid #eef2f7;
   box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.04);
@@ -525,12 +633,36 @@ function formatTime(value: string) {
   border: 0;
   background: transparent;
   color: #9ca3af;
-  font-size: 12px;
-  font-weight: 650;
-  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 2px;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  line-height: 0;
+}
+.tab-icon svg {
+  display: block;
+}
+.tab-label {
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
 }
 .tab-item.active {
   color: #2563eb;
+}
+.tab-item.active .tab-label {
+  font-weight: 750;
 }
 </style>

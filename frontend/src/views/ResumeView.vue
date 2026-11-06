@@ -330,7 +330,7 @@ onMounted(async () => {
   position: sticky;
   bottom: 72px;
   z-index: 20;
-  padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
+  padding: 12px 0 calc(12px + var(--bottom-inset, 0px));
   background: linear-gradient(180deg, transparent, #f9fafb 30%);
 }
 </style>

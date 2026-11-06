@@ -12,6 +12,17 @@
   --radius-md: 12px;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
   --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  /* iOS / 微信 WebView 底部安全区；需配合 viewport-fit=cover */
+  --safe-bottom: constant(safe-area-inset-bottom);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --wechat-bottom-gap: 0px;
+  --bottom-inset: calc(var(--safe-bottom) + var(--wechat-bottom-gap));
+}
+
+html.is-wechat {
+  /* 微信自带底栏常盖住 fixed 元素，safe-area 又经常为 0，补一点空隙 */
+  --wechat-bottom-gap: 12px;
+}
 
   /* Arco primary → blue/indigo (whues-like) */
   --primary-1: 239, 246, 255;
@@ -33,6 +44,7 @@
 html, body, #app {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font);
   background: var(--bg-page);
   color: var(--text-strong);

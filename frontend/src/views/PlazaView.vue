@@ -1155,7 +1155,7 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 10px;
-  padding: 12px 0 calc(4px + env(safe-area-inset-bottom));
+  padding: 12px 0 calc(4px + var(--bottom-inset, 0px));
   background: #fff;
   border-top: 1px solid #eef2f7;
 }

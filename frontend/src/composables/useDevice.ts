@@ -23,6 +23,10 @@ export function provideDevice() {
     media = window.matchMedia(MOBILE_QUERY)
     sync()
     media.addEventListener('change', sync)
+    // 微信内置浏览器会盖住底部 fixed 栏，打标给 CSS 补安全间距
+    if (/MicroMessenger/i.test(navigator.userAgent)) {
+      document.documentElement.classList.add('is-wechat')
+    }
   })
 
   onUnmounted(() => {

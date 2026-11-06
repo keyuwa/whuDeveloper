@@ -499,7 +499,7 @@ async function startChat() {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-.detail-mobile.has-mobile-cta { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+.detail-mobile.has-mobile-cta { padding-bottom: calc(72px + var(--bottom-inset, 0px)); }
 .mobile-cta-bar {
   position: fixed;
   left: 0;
@@ -512,7 +512,7 @@ async function startChat() {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
   gap: 8px;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  padding: 10px 12px calc(10px + var(--bottom-inset, 0px));
   background: rgba(255, 255, 255, 0.98);
   border-top: 1px solid #eef2f7;
   box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.06);
