@@ -354,12 +354,15 @@ function formatTime(value: string) {
     <header v-else class="mobile-header">
       <div class="mobile-title">{{ mobileTitle }}</div>
       <div class="mobile-header-actions">
-        <a-badge v-if="user" :count="unread" :max-count="99">
-          <a-button type="text" shape="circle" size="small" @click="openNotifications">
-            <icon-notification />
-          </a-button>
-        </a-badge>
-        <a-button v-if="!user" type="text" size="small" @click="router.push('/auth/login')">登录</a-button>
+        <template v-if="user">
+          <a-badge :count="unread" :max-count="99">
+            <a-button type="text" shape="circle" size="small" @click="openNotifications">
+              <icon-notification />
+            </a-button>
+          </a-badge>
+          <a-button type="text" size="small" class="mobile-logout" @click="onLogout">退出</a-button>
+        </template>
+        <a-button v-else type="text" size="small" @click="router.push('/auth/login')">登录</a-button>
       </div>
     </header>
 
@@ -490,7 +493,12 @@ function formatTime(value: string) {
 .mobile-header-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+}
+.mobile-logout {
+  color: #6b7280;
+  font-weight: 600;
+  padding: 0 6px;
 }
 .page-mobile {
   padding: 12px 12px 24px !important;

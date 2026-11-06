@@ -11,6 +11,7 @@ const isMobile = useIsMobile()
 const tasks = ref<Task[]>([])
 const projects = ref<Project[]>([])
 const loading = ref(false)
+const statusTab = ref<'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED'>('ALL')
 
 const statusLabel: Record<string, string> = {
   DRAFT: '草稿',
@@ -43,6 +44,28 @@ const projectsByTask = computed(() => {
     map.set(item.taskId, list)
   }
   return map
+})
+
+const statusCounts = computed(() => {
+  const counts = { ALL: tasks.value.length, OPEN: 0, DRAFT: 0, CLOSED: 0 }
+  for (const task of tasks.value) {
+    if (task.status === 'OPEN') counts.OPEN += 1
+    else if (task.status === 'DRAFT') counts.DRAFT += 1
+    else if (task.status === 'CLOSED') counts.CLOSED += 1
+  }
+  return counts
+})
+
+const filteredTasks = computed(() => {
+  if (statusTab.value === 'ALL') return tasks.value
+  return tasks.value.filter((task) => task.status === statusTab.value)
+})
+
+const emptyDescription = computed(() => {
+  if (statusTab.value === 'OPEN') return '暂无已发布任务'
+  if (statusTab.value === 'DRAFT') return '暂无草稿'
+  if (statusTab.value === 'CLOSED') return '暂无已下架任务'
+  return '还没有任务'
 })
 
 async function load() {
@@ -115,14 +138,27 @@ function openInbox(taskId?: number) {
       <a-space wrap>
         <a-button size="small" @click="openInbox()">全部申请</a-button>
         <a-button type="primary" size="small" @click="router.push('/publisher/tasks/new')">
-          {{ isMobile ? '发布' : '发布任务' }}
+          {{ isMobile ? '新建任务' : '发布任务' }}
         </a-button>
       </a-space>
     </header>
+
+    <a-tabs
+      v-model:active-key="statusTab"
+      type="rounded"
+      :size="isMobile ? 'medium' : 'large'"
+      class="status-tabs"
+    >
+      <a-tab-pane key="ALL" :title="`全部 · ${statusCounts.ALL}`" />
+      <a-tab-pane key="OPEN" :title="`已发布 · ${statusCounts.OPEN}`" />
+      <a-tab-pane key="DRAFT" :title="`草稿 · ${statusCounts.DRAFT}`" />
+      <a-tab-pane key="CLOSED" :title="`已下架 · ${statusCounts.CLOSED}`" />
+    </a-tabs>
+
     <a-spin :loading="loading" style="width: 100%">
-      <a-empty v-if="!loading && tasks.length === 0" description="还没有任务" />
+      <a-empty v-if="!loading && filteredTasks.length === 0" :description="emptyDescription" />
       <div v-else class="stack">
-        <a-card v-for="task in tasks" :key="task.id" class="task-card">
+        <a-card v-for="task in filteredTasks" :key="task.id" class="task-card">
           <div class="task-row">
             <div class="task-main">
               <a-space wrap style="margin-bottom: 8px">
@@ -193,21 +229,28 @@ function openInbox(taskId?: number) {
 </template>
 
 <style scoped>
-.task-card { border: 1px solid #eef2f7; }
+.status-tabs {
+  margin: 4px 0 14px;
+}
+.task-card { border: 1px solid #eef2f7; width: 100%; }
+.task-card :deep(.arco-card-body) { width: 100%; }
 .task-row {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
   flex-wrap: wrap;
+  width: 100%;
 }
-.task-main { min-width: 0; flex: 1; }
+.task-main { min-width: 0; flex: 1; width: 100%; }
 .enrolled {
   margin-top: 14px;
   padding: 12px 14px;
   background: #f8fafc;
   border: 1px solid #eef2f7;
   border-radius: 10px;
+  width: 100%;
+  box-sizing: border-box;
 }
 .enrolled-title {
   font-size: 12px;
@@ -234,13 +277,32 @@ function openInbox(taskId?: number) {
   align-items: center;
   margin-bottom: 14px;
 }
+.publisher-mobile,
+.publisher-mobile .stack,
+.publisher-mobile .task-card {
+  width: 100%;
+}
 .publisher-mobile .task-row {
   flex-direction: column;
+  align-items: stretch;
+}
+.publisher-mobile .task-main {
+  width: 100%;
+  max-width: 100%;
+  flex: none;
 }
 .publisher-mobile .enrolled {
   margin-top: 12px;
+  width: 100%;
 }
 @media (max-width: 700px) {
-  .task-row { flex-direction: column; }
+  .task-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .task-main {
+    width: 100%;
+    flex: none;
+  }
 }
 </style>
