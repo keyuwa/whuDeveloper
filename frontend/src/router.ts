@@ -7,6 +7,7 @@ import TaskDetailView from './views/TaskDetailView.vue'
 import WorkbenchView from './views/WorkbenchView.vue'
 import ProjectShell from './views/project/ProjectShell.vue'
 import ProjectDetailView from './views/project/ProjectDetailView.vue'
+import ProjectApplicationView from './views/project/ProjectApplicationView.vue'
 import ProjectMilestonesView from './views/project/ProjectMilestonesView.vue'
 import ProjectCompletionView from './views/project/ProjectCompletionView.vue'
 import MessagesView from './views/MessagesView.vue'
@@ -67,6 +68,8 @@ export const router = createRouter({
       children: [
         { path: '', redirect: (to) => `/publisher/projects/${to.params.id}/detail` },
         { path: 'detail', component: ProjectDetailView },
+        { path: 'application', component: ProjectApplicationView },
+        { path: 'ai', redirect: (to) => `/publisher/projects/${to.params.id}/application` },
         { path: 'progress', component: ProjectMilestonesView },
         { path: 'milestones', redirect: (to) => `/publisher/projects/${to.params.id}/progress` },
         { path: 'reports', redirect: (to) => `/publisher/projects/${to.params.id}/progress` },

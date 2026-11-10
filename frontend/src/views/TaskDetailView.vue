@@ -104,6 +104,12 @@ watch(
   { immediate: true },
 )
 
+function scrollToApply() {
+  const el = document.getElementById('apply')
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
 async function apply() {
   if (!auth.token) return router.push('/auth/login')
   if (!resumeReady.value) {
@@ -113,6 +119,7 @@ async function apply() {
   const text = proposalText.value.trim()
   if (!challengeOpen.value) return Message.error(isChallenge.value ? '揭榜已截止或已结束' : '项目未开放申请')
   if (!text && !proposalFile.value) {
+    scrollToApply()
     return Message.error(isChallenge.value ? '请填写方案内容，或上传 PDF 附件' : '请填写申请内容，或上传 PDF 附件')
   }
   if (text.length > 10000) return Message.error('申请文字不超过 10000 字')
@@ -134,6 +141,16 @@ async function apply() {
   } finally {
     loading.value = false
   }
+}
+
+function onMobileApplyClick() {
+  if (task.value?.myApplicationId) return
+  if (!proposalText.value.trim() && !proposalFile.value) {
+    scrollToApply()
+    Message.info(isChallenge.value ? '请先填写或上传科研方案' : '请先填写或上传申请内容')
+    return
+  }
+  return apply()
 }
 
 async function toggleShortlist() {
@@ -388,8 +405,9 @@ async function startChat() {
       <a-button :loading="loading" @click="startChat">沟通</a-button>
       <a-button
         type="primary"
-        :disabled="Boolean(task.myApplicationId) || task.status !== 'OPEN'"
-        @click="router.push({ hash: '#apply' })"
+        :loading="loading"
+        :disabled="Boolean(task.myApplicationId) || !challengeOpen"
+        @click="onMobileApplyClick"
       >
         {{ task.myApplicationId ? (isChallenge ? '已交方案' : '已申请') : (isChallenge ? '提交方案' : '立即申请') }}
       </a-button>
@@ -465,7 +483,7 @@ async function startChat() {
 .hero-card :deep(h3) { font-size: 26px; }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 18px; }
 .apply-jump { font-size: 13px; color: #2868b7; }
-.application-panel { scroll-margin-top: 24px; }
+.application-panel { scroll-margin-top: 24px; scroll-margin-bottom: 96px; }
 .application-intro { color: #657386; font-size: 14px; line-height: 1.8; margin: 14px 0; }
 .application-guide { background: #f6f8fb; padding: 16px; margin: 16px 0; line-height: 1.9; font-size: 13px; }
 .application-guide > strong { display: block; margin-bottom: 8px; color: #374151; }

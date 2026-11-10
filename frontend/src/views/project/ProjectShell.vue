@@ -8,13 +8,14 @@ import { useProjectWorkspace } from '../../composables/useProjectWorkspace'
 
 const route = useRoute()
 const router = useRouter()
-const { project, loading, basePath, isStudent } = useProjectWorkspace()
+const { project, loading, basePath, isStudent, isPublisher } = useProjectWorkspace()
 const leaving = ref(false)
 const backTo = computed(() => (auth.user?.role === 'PUBLISHER' ? '/publisher/inbox' : '/me/workbench'))
 const backLabel = computed(() => (auth.user?.role === 'PUBLISHER' ? '返回审阅' : '返回工作台'))
 const canLeave = computed(
   () => isStudent.value && project.value && ['ACTIVE', 'COMPLETING'].includes(project.value.status),
 )
+const showApplicationTab = computed(() => isPublisher.value)
 
 const statusLabel: Record<string, string> = {
   ACTIVE: '进行中',
@@ -23,14 +24,21 @@ const statusLabel: Record<string, string> = {
   TERMINATED: '已终止',
 }
 
-const tabs = computed(() => [
-  { key: 'detail', label: '项目详情', path: `${basePath.value}/detail` },
-  { key: 'progress', label: '周报', path: `${basePath.value}/progress` },
-  { key: 'completion', label: '结项验收', path: `${basePath.value}/completion` },
-])
+const tabs = computed(() => {
+  const items = [{ key: 'detail', label: '项目详情', path: `${basePath.value}/detail` }]
+  if (showApplicationTab.value) {
+    items.push({ key: 'application', label: '申请内容', path: `${basePath.value}/application` })
+  }
+  items.push(
+    { key: 'progress', label: '周报', path: `${basePath.value}/progress` },
+    { key: 'completion', label: '结项验收', path: `${basePath.value}/completion` },
+  )
+  return items
+})
 
 const activeTab = computed(() => {
   const path = route.path
+  if (path.endsWith('/application') || path.endsWith('/ai')) return 'application'
   if (path.endsWith('/progress') || path.endsWith('/milestones') || path.endsWith('/reports')) return 'progress'
   if (path.endsWith('/completion')) return 'completion'
   return 'detail'

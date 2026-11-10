@@ -360,12 +360,14 @@ public class ProjectService {
                         item.getStatus(),
                         item.getReviewNote()))
                 .orElse(null);
+        var application = project.getApplication();
         return new ProjectResponse(
                 project.getId(),
                 project.getTask().getId(),
                 project.getTask().getTitle(),
                 project.getTask().getTechField(),
                 project.getTask().getRoleType(),
+                project.getTask().getPostingMode(),
                 project.getStudent().getId(),
                 project.getStudent().getDisplayName(),
                 project.getStudent().getAbilityLevel(),
@@ -373,9 +375,14 @@ public class ProjectService {
                 project.getPublisher().getRealName() == null ? project.getPublisher().getDisplayName() : project.getPublisher().getRealName(),
                 project.getStatus(),
                 project.getEnrolledAt(),
-                project.getApplication().getProposalMd(),
-                project.getApplication().getId(),
-                project.getApplication().getProposalFileName(),
+                application.getProposalMd(),
+                application.getId(),
+                application.getProposalFileName(),
+                application.getAiScore(),
+                application.getAiSummary(),
+                application.getAiDetailJson(),
+                application.getAiStatus(),
+                application.getAiScoredAt(),
                 milestoneViews,
                 reportViews,
                 completionView);
@@ -391,6 +398,7 @@ public class ProjectService {
             String taskTitle,
             String taskType,
             String taskRoleType,
+            String postingMode,
             Long studentId,
             String studentName,
             String abilityLevel,
@@ -401,6 +409,11 @@ public class ProjectService {
             String proposalMd,
             Long applicationId,
             String proposalFileName,
+            Integer aiScore,
+            String aiSummary,
+            String aiDetailJson,
+            String aiStatus,
+            LocalDateTime aiScoredAt,
             List<MilestoneView> milestones,
             List<ReportView> reports,
             CompletionView completion

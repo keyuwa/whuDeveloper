@@ -156,6 +156,7 @@ export interface Project {
   taskTitle: string
   taskType: string
   taskRoleType?: string
+  postingMode?: string | null
   studentId: number
   studentName: string
   abilityLevel: string | null
@@ -166,6 +167,11 @@ export interface Project {
   proposalMd: string
   applicationId: number
   enrolledAt: string
+  aiScore?: number | null
+  aiSummary?: string | null
+  aiDetailJson?: string | null
+  aiStatus?: string | null
+  aiScoredAt?: string | null
   milestones: Milestone[]
   reports: Report[]
   completion: Completion | null
