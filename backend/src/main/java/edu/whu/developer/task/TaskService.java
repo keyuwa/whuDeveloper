@@ -128,7 +128,7 @@ public class TaskService {
     public TaskResponse get(Long id) {
         Task task = tasks.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在"));
         AuthUser viewer = currentOrNull();
-        if (!"OPEN".equals(task.getStatus()) && !canManage(task, viewer)) {
+        if (!"OPEN".equals(task.getStatus()) && !canViewNonOpen(task, viewer)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在");
         }
         return toResponse(task, viewer);
@@ -571,6 +571,20 @@ public class TaskService {
             return false;
         }
         return viewer.getRole() == Role.ADMIN || task.getPublisher().getId().equals(viewer.getId());
+    }
+
+    /** 已下架/草稿任务：发布方、管理员、已申请/已入项/已备选的学生仍可查看原文。 */
+    private boolean canViewNonOpen(Task task, AuthUser viewer) {
+        if (canManage(task, viewer)) {
+            return true;
+        }
+        if (viewer == null || viewer.getRole() != Role.STUDENT) {
+            return false;
+        }
+        Long studentId = viewer.getId();
+        return applications.findByTaskIdAndStudentId(task.getId(), studentId).isPresent()
+                || shortlists.existsByStudentIdAndTaskId(studentId, task.getId())
+                || projects.existsByTaskIdAndStudentId(task.getId(), studentId);
     }
 
     private AuthUser currentOrNull() {

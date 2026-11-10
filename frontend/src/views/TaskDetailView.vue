@@ -244,7 +244,7 @@ async function startChat() {
           </div>
           <pre v-if="task.techDocMd" class="md">{{ task.techDocMd }}</pre>
         </a-card>
-        <a-card v-if="isStudent" id="apply" class="application-panel" :title="isChallenge ? '科研方案（揭榜）' : '项目申请'">
+        <a-card v-if="isStudent" id="apply" class="application-panel" :title="isChallenge ? '科研方案' : '项目申请'">
           <template v-if="!task.myApplicationId">
             <a-alert
               v-if="!resumeReady"

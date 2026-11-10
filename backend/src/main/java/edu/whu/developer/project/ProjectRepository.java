@@ -20,6 +20,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
     boolean existsByTaskId(Long taskId);
 
+    boolean existsByTaskIdAndStudentId(Long taskId, Long studentId);
+
     List<Project> findByTaskId(Long taskId);
 
     @Query("""
