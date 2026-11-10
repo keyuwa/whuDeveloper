@@ -38,23 +38,56 @@ const form = reactive({
   techDocFileUrl: '',
   techDocFileName: '',
   quota: 1,
+  bidDeadline: '' as string,
 })
+const bidLongTerm = ref(true)
 
 const isIntern = computed(() => form.roleType === 'INTERN')
 const isTa = computed(() => form.roleType === 'TA')
 const isRa = computed(() => form.roleType === 'RA')
 const techFieldOptions = dictOptions('TECH_FIELD')
 const difficultyOptions = dictOptions('DIFFICULTY')
-const supportLanguageOptions = dictOptions('SUPPORT_LANGUAGE')
 const educationOptions = dictItems('STUDENT_IDENTITY')
 const programmingLanguageOptions = dictOptions('PROGRAMMING_LANGUAGE')
 const taScheduleOptions = dictOptions('TA_SCHEDULE')
 const raScheduleOptions = dictOptions('RA_SCHEDULE')
 const scheduleOptions = computed(() => (isTa.value ? taScheduleOptions.value : raScheduleOptions.value))
 
+function tasksListQuery(status?: string) {
+  const roleFromForm = form.roleType === 'TA' || form.roleType === 'INTERN' || form.roleType === 'RA'
+    ? form.roleType
+    : null
+  const roleFromQuery = String(route.query.roleType || '').toUpperCase()
+  const roleType =
+    roleFromForm ||
+    (roleFromQuery === 'TA' || roleFromQuery === 'INTERN' || roleFromQuery === 'RA' ? roleFromQuery : 'INTERN')
+  const statusFromQuery = String(route.query.status || '').toUpperCase()
+  const nextStatus =
+    status ||
+    (statusFromQuery === 'OPEN' || statusFromQuery === 'DRAFT' || statusFromQuery === 'CLOSED' || statusFromQuery === 'ALL'
+      ? statusFromQuery
+      : 'ALL')
+  sessionStorage.setItem('publisher.tasks.roleType', roleType)
+  sessionStorage.setItem('publisher.tasks.status', nextStatus)
+  return { roleType, status: nextStatus }
+}
+
+function goTasksList(status?: string) {
+  return router.push({ path: '/publisher/tasks', query: tasksListQuery(status) })
+}
+
 onMounted(async () => {
   await loadDicts()
-  if (!route.params.id) return
+  if (!route.params.id) {
+    const queryRole = String(route.query.roleType || '').toUpperCase()
+    if (queryRole === 'TA' || queryRole === 'INTERN' || queryRole === 'RA') {
+      form.roleType = queryRole
+      if (queryRole !== 'INTERN' && selectedLanguages.value.includes('TypeScript')) {
+        selectedLanguages.value = ['不限']
+      }
+    }
+    return
+  }
   try {
     const task = await api<Task>(`/api/v1/tasks/${route.params.id}`)
     taskStatus.value = task.status
@@ -81,7 +114,9 @@ onMounted(async () => {
       techDocFileUrl: task.techDocFileUrl || '',
       techDocFileName: task.techDocFileName || '',
       quota: task.quota,
+      bidDeadline: task.bidDeadline ? task.bidDeadline.slice(0, 19) : '',
     })
+    bidLongTerm.value = task.roleType === 'RA' ? !task.bidDeadline : true
     selectedLanguages.value = task.programmingLanguages
       .split(',')
       .map((item) => item.trim())
@@ -171,7 +206,7 @@ function removeTask() {
       try {
         await api(`/api/v1/publisher/tasks/${route.params.id}`, { method: 'DELETE' })
         Message.success('已删除')
-        await router.push('/publisher/tasks')
+        await goTasksList()
       } catch (cause) {
         Message.error(cause instanceof Error ? cause.message : '删除失败')
         throw cause
@@ -187,15 +222,19 @@ async function save(publish: boolean) {
     Message.error('请选择任务类型')
     return
   }
-  if ((isTa.value || isRa.value) && !form.scheduleType) {
-    Message.error(isTa.value ? '请选择助教学期' : '请选择科研周期')
+  if (isTa.value && !form.scheduleType) {
+    Message.error('请选择助教学期')
+    return
+  }
+  if (isRa.value && !bidLongTerm.value && !form.bidDeadline) {
+    Message.error('请设置揭榜截止时间，或勾选长期开放')
     return
   }
   if (isTa.value && selectedEducations.value.length === 0) {
     Message.error('请选择在读身份')
     return
   }
-  if (!form.techRequirement.trim()) {
+  if (!isRa.value && !form.techRequirement.trim()) {
     Message.error('请填写能力要求')
     return
   }
@@ -215,26 +254,31 @@ async function save(publish: boolean) {
   try {
     form.programmingLanguages = selectedLanguages.value.join(',') || (isIntern.value ? '' : '不限')
     form.educationLevels = isTa.value ? selectedEducations.value.join(',') : ''
-    const path = route.params.id ? `/api/v1/publisher/tasks/${route.params.id}` : `/api/v1/publisher/tasks?publish=${publish}`
+    const path = route.params.id
+      ? `/api/v1/publisher/tasks/${route.params.id}?publish=${publish}`
+      : `/api/v1/publisher/tasks?publish=${publish}`
     const method = route.params.id ? 'PUT' : 'POST'
     const payload = {
       ...form,
       techField: isTa.value ? '教学助教' : form.techField,
       difficulty: isIntern.value ? form.difficulty : 'L3',
       repoUrl: isIntern.value ? form.repoUrl || null : null,
-      scheduleType: isIntern.value ? null : form.scheduleType || null,
+      scheduleType: isIntern.value || isRa.value ? null : form.scheduleType || null,
       educationLevels: isTa.value ? form.educationLevels : null,
       durationWeeks: isIntern.value ? form.durationWeeks : null,
+      estimatedHours: isRa.value ? null : form.estimatedHours,
+      supportLanguages: null,
       stipendText: form.stipendText.trim(),
       prdFileUrl: isIntern.value ? form.prdFileUrl || null : null,
       prdFileName: isIntern.value ? form.prdFileName || null : null,
       techDocFileUrl: isIntern.value ? form.techDocFileUrl || null : null,
       techDocFileName: isIntern.value ? form.techDocFileName || null : null,
+      quota: form.quota,
+      bidDeadline: isRa.value && !bidLongTerm.value && form.bidDeadline ? form.bidDeadline : null,
     }
-    const task = await api<Task>(path, { method, body: JSON.stringify(payload) })
-    if (route.params.id && publish) await api(`/api/v1/publisher/tasks/${task.id}/publish`, { method: 'POST' })
-    Message.success(publish ? '已发布' : '已保存')
-    await router.push('/publisher/tasks')
+    await api<Task>(path, { method, body: JSON.stringify(payload) })
+    Message.success(publish ? '已发布' : '已保存草稿')
+    await goTasksList(publish ? 'ALL' : 'DRAFT')
   } catch (cause) {
     Message.error(cause instanceof Error ? cause.message : '保存失败')
   } finally {
@@ -244,7 +288,15 @@ async function save(publish: boolean) {
 </script>
 
 <template>
-  <a-card :title="route.params.id ? '编辑项目' : '发布项目'">
+  <a-card :title="route.params.id ? '编辑项目' : (isRa ? '发布科研 RA' : '发布项目')">
+    <a-alert
+      v-if="isRa"
+      type="info"
+      style="margin-bottom: 16px"
+      title="科研 RA · 揭榜形式"
+    >
+      科研 RA 采用揭榜：发布开放方向，学生提交方案；可同时揭榜多人，截止时间可设也可长期开放。
+    </a-alert>
     <a-alert
       v-if="isMobile"
       type="info"
@@ -267,7 +319,7 @@ async function save(publish: boolean) {
         </a-radio-group>
       </a-form-item>
       <a-row :gutter="12">
-        <a-col v-if="!isTa" :span="isIntern ? 8 : 12">
+        <a-col v-if="!isTa" :span="isIntern ? 16 : 24">
           <a-form-item :label="isRa ? '研究方向' : '技术领域'" required>
             <a-select v-model="form.techField">
               <a-option v-for="item in techFieldOptions" :key="item.value" :value="item.value">{{ item.label }}</a-option>
@@ -281,13 +333,6 @@ async function save(publish: boolean) {
             </a-select>
           </a-form-item>
         </a-col>
-        <a-col :span="isTa ? 24 : isIntern ? 8 : 12">
-          <a-form-item label="支持语言" required>
-            <a-select v-model="form.supportLanguages">
-              <a-option v-for="item in supportLanguageOptions" :key="item.value" :value="item.value">{{ item.label }}</a-option>
-            </a-select>
-          </a-form-item>
-        </a-col>
       </a-row>
       <a-form-item v-if="isTa" label="在读身份" required>
         <a-checkbox-group :model-value="selectedEducations" @change="(value) => syncEducations((value as string[]) || [])">
@@ -296,8 +341,29 @@ async function save(publish: boolean) {
       </a-form-item>
       <a-row :gutter="[16, 8]" class="meta-row">
         <a-col :xs="24" :sm="12" :lg="8">
-          <a-form-item label="名额">
+          <a-form-item :label="isRa ? '揭榜名额' : '名额'">
             <a-input-number v-model="form.quota" :min="1" style="width: 100%" />
+          </a-form-item>
+        </a-col>
+        <a-col v-if="isRa" :xs="24" :sm="12" :lg="16">
+          <a-form-item label="揭榜截止">
+            <div class="deadline-row">
+              <a-checkbox
+                :model-value="bidLongTerm"
+                @change="(checked) => { bidLongTerm = Boolean(checked); if (bidLongTerm) form.bidDeadline = '' }"
+              >
+                长期开放
+              </a-checkbox>
+              <a-date-picker
+                v-if="!bidLongTerm"
+                v-model="form.bidDeadline"
+                show-time
+                value-format="YYYY-MM-DDTHH:mm:ss"
+                format="YYYY-MM-DD HH:mm"
+                style="flex: 1; min-width: 200px"
+                placeholder="方案提交截止时间"
+              />
+            </div>
           </a-form-item>
         </a-col>
         <a-col v-if="isIntern" :xs="24" :sm="12" :lg="8">
@@ -307,14 +373,14 @@ async function save(publish: boolean) {
             </a-input-number>
           </a-form-item>
         </a-col>
-        <a-col v-else :xs="24" :sm="12" :lg="8">
-          <a-form-item :label="isTa ? '学期' : '科研周期'" required>
+        <a-col v-if="isTa" :xs="24" :sm="12" :lg="8">
+          <a-form-item label="学期" required>
             <a-select v-model="form.scheduleType" placeholder="请选择">
               <a-option v-for="item in scheduleOptions" :key="item.value" :value="item.value">{{ item.label }}</a-option>
             </a-select>
           </a-form-item>
         </a-col>
-        <a-col :xs="24" :sm="12" :lg="8">
+        <a-col v-if="!isRa" :xs="24" :sm="12" :lg="8">
           <a-form-item label="每周投入">
             <a-input-number v-model="form.estimatedHours" :min="1" style="width: 100%">
               <template #suffix>小时</template>
@@ -340,18 +406,29 @@ async function save(publish: boolean) {
       <a-form-item v-if="isIntern" label="仓库">
         <a-input v-model="form.repoUrl" placeholder="可选：代码仓库链接" />
       </a-form-item>
-      <a-form-item label="背景与目标" required><a-textarea v-model="form.background" :auto-size="{ minRows: 3 }" /></a-form-item>
-      <a-form-item label="产出要求" required><a-textarea v-model="form.outputRequirement" /></a-form-item>
+      <a-form-item :label="isRa ? '背景与开放方向' : '背景与目标'" required>
+        <a-textarea
+          v-model="form.background"
+          :auto-size="{ minRows: 3 }"
+          :placeholder="isRa ? '说明研究背景、希望攻关的开放问题' : ''"
+        />
+      </a-form-item>
+      <a-form-item :label="isRa ? '期望产出' : '产出要求'" :required="!isRa">
+        <a-textarea
+          v-model="form.outputRequirement"
+          :placeholder="isRa ? '可选：希望方案落地后产出什么（论文、原型、数据集等）' : ''"
+        />
+      </a-form-item>
       <a-form-item
         field="techRequirement"
-        label="能力要求"
-        required
-        :rules="[{ required: true, message: '请填写能力要求' }]"
+        :label="isRa ? '能力与约束' : '能力要求'"
+        :required="!isRa"
+        :rules="isRa ? [] : [{ required: true, message: '请填写能力要求' }]"
       >
         <a-textarea
           v-model="form.techRequirement"
           :auto-size="{ minRows: 3 }"
-          placeholder="例如：熟悉 Java / Spring Boot，能独立完成模块开发与周报"
+          :placeholder="isRa ? '可选：前置知识、数据/算力约束、协作方式等' : '例如：熟悉 Java / Spring Boot，能独立完成模块开发与周报'"
         />
       </a-form-item>
       <a-form-item
@@ -585,6 +662,13 @@ async function save(publish: boolean) {
   display: flex;
   gap: 10px;
   flex-shrink: 0;
+}
+.deadline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
 }
 .meta-row :deep(.arco-form-item-label) {
   white-space: nowrap;

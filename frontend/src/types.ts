@@ -52,6 +52,9 @@ export interface Task {
   filled: number
   pendingApplications?: number
   status: string
+  postingMode?: string
+  bidDeadline?: string | null
+  challengeStatus?: string | null
   publisherId: number
   publisherName: string
   createdAt: string
@@ -61,11 +64,31 @@ export interface Task {
   shortlisted?: boolean
 }
 
+export interface TaskPage {
+  items: Task[]
+  page: number
+  size: number
+  total: number
+  hasMore: boolean
+}
+
+export interface PublisherTaskPage extends TaskPage {
+  totalAll: number
+  totalOpen: number
+  totalDraft: number
+  totalClosed: number
+  totalTa: number
+  totalIntern: number
+  totalRa: number
+}
+
 export interface Application {
   id: number
   taskId: number
   taskTitle: string
   taskType: string
+  taskRoleType?: string
+  postingMode?: string
   studentId: number
   studentName: string
   realName: string | null
@@ -84,6 +107,11 @@ export interface Application {
   interviewNote: string | null
   reviewNote: string | null
   remindCount: number
+  aiScore?: number | null
+  aiSummary?: string | null
+  aiDetailJson?: string | null
+  aiStatus?: string | null
+  aiScoredAt?: string | null
   createdAt: string
   projectId: number | null
 }
@@ -203,6 +231,22 @@ export const TASK_ROLE_LABEL: Record<string, string> = {
   INTERN: '开发 Intern',
   RA: '科研 RA',
 }
+
+export const CHALLENGE_STATUS_LABEL: Record<string, string> = {
+  OPEN: '揭榜中',
+  SELECTING: '比选中',
+  AWARDED: '已揭榜',
+  CLOSED: '已截止',
+}
+
+export const CHALLENGE_PROPOSAL_TEMPLATE = `## 理解与切入点
+
+## 研究/技术方案
+
+## 已有基础与证据
+
+## 周期与里程碑
+`
 
 export const TECH_FIELDS = ['前端开发', '后端开发', '全栈应用', '人工智能', '系统与底层', '开发工具', '数据与存储'] as const
 export const DIFFICULTIES = ['L1', 'L2', 'L3', 'L4', 'L5'] as const

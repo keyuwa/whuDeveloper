@@ -1,8 +1,8 @@
 package edu.whu.developer.application;
 
 import edu.whu.developer.application.ApplicationService.ApplicationResponse;
+import edu.whu.developer.application.ApplicationService.AwardRequest;
 import edu.whu.developer.application.ApplicationService.InterviewRequest;
-
 import edu.whu.developer.application.ApplicationService.ReviewRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -67,8 +67,18 @@ public class ApplicationController {
         return applications.review(id, request);
     }
 
+    @PostMapping("/applications/{id}/award")
+    public ApplicationResponse award(@PathVariable Long id, @RequestBody(required = false) AwardRequest request) {
+        return applications.award(id, request == null ? new AwardRequest(null) : request);
+    }
+
     @PostMapping("/applications/{id}/interview")
     public ApplicationResponse interview(@PathVariable Long id, @Valid @RequestBody InterviewRequest request) {
         return applications.interview(id, request);
+    }
+
+    @PostMapping("/applications/{id}/ai-rescore")
+    public ApplicationResponse aiRescore(@PathVariable Long id) {
+        return applications.rescoreAi(id);
     }
 }

@@ -3,6 +3,8 @@ package edu.whu.developer.admin;
 import edu.whu.developer.ability.AbilityService;
 import edu.whu.developer.ability.AbilityService.AdminAbilityRequest;
 import edu.whu.developer.ability.AbilityService.PointsAdjustRequest;
+import edu.whu.developer.application.ApplicationAiReviewService;
+import edu.whu.developer.application.ApplicationAiReviewService.ArkTestResult;
 import edu.whu.developer.auth.Role;
 import edu.whu.developer.auth.User;
 import edu.whu.developer.auth.UserRepository;
@@ -48,6 +50,7 @@ public class AdminController {
     private final StatusEventRepository events;
     private final AuditService audit;
     private final AbilityService ability;
+    private final ApplicationAiReviewService aiReview;
 
     public AdminController(UserRepository users,
                            TaskService tasks,
@@ -55,7 +58,8 @@ public class AdminController {
                            SettingService settings,
                            StatusEventRepository events,
                            AuditService audit,
-                           AbilityService ability) {
+                           AbilityService ability,
+                           ApplicationAiReviewService aiReview) {
         this.users = users;
         this.tasks = tasks;
         this.reminders = reminders;
@@ -63,6 +67,7 @@ public class AdminController {
         this.events = events;
         this.audit = audit;
         this.ability = ability;
+        this.aiReview = aiReview;
     }
 
     @GetMapping("/users")
@@ -134,21 +139,61 @@ public class AdminController {
         return currentSettings();
     }
 
-    @PutMapping("/settings")
-    public SettingsView updateSettings(@Valid @RequestBody SettingsRequest request) {
+    @PutMapping("/settings/ark")
+    public SettingsView updateArkSettings(@Valid @RequestBody ArkSettingsRequest request) {
         AuthUser admin = AuthSupport.requireRole(Role.ADMIN);
-        settings.put("review_sla_days", String.valueOf(request.reviewSlaDays()));
-        settings.put("escalate_sla_days", String.valueOf(request.escalateSlaDays()));
+        settings.put("ark_enabled", Boolean.TRUE.equals(request.arkEnabled()) ? "true" : "false");
+        if (Boolean.TRUE.equals(request.clearArkApiKey())) {
+            settings.put("ark_api_key", "");
+        } else if (request.arkApiKey() != null && !request.arkApiKey().isBlank()) {
+            settings.put("ark_api_key", request.arkApiKey().trim());
+        }
+        String baseUrl = request.arkBaseUrl() == null ? "" : request.arkBaseUrl().trim();
+        settings.put("ark_base_url", baseUrl.isBlank() ? "" : normalizeArkBaseUrl(baseUrl));
+        settings.put("ark_model", request.arkModel() == null ? "" : request.arkModel().trim());
+        settings.put(
+                "ra_challenge_ai_prompt",
+                request.raChallengeAiPrompt() == null ? "" : request.raChallengeAiPrompt());
+        audit.record(admin.getId(), "SETTINGS", 0L, "UPDATE", "ark");
+        return currentSettings();
+    }
+
+    @PostMapping("/settings/ark/test")
+    public ArkTestResult testArkSettings(@RequestBody(required = false) ArkTestRequest request) {
+        AuthSupport.requireRole(Role.ADMIN);
+        ArkTestRequest body = request == null ? new ArkTestRequest(null, null, null) : request;
+        return aiReview.testConnection(body.arkApiKey(), body.arkBaseUrl(), body.arkModel());
+    }
+
+    @PutMapping("/settings/rubric")
+    public SettingsView updateRubricSettings(@Valid @RequestBody RubricSettingsRequest request) {
+        AuthUser admin = AuthSupport.requireRole(Role.ADMIN);
+        settings.put(
+                "ability_rubric_md",
+                request.abilityRubricMd() == null ? "" : request.abilityRubricMd());
+        audit.record(admin.getId(), "SETTINGS", 0L, "UPDATE", "rubric");
+        return currentSettings();
+    }
+
+    @PutMapping("/settings/tutorial")
+    public SettingsView updateTutorialSettings(@Valid @RequestBody TutorialSettingsRequest request) {
+        AuthUser admin = AuthSupport.requireRole(Role.ADMIN);
         settings.put("tutorial_doc_url", request.tutorialDocUrl() == null ? "" : request.tutorialDocUrl().trim());
         settings.put(
                 "tutorial_banner_text",
                 request.tutorialBannerText() == null || request.tutorialBannerText().isBlank()
                         ? "系统使用教程请参考平台文档，点击查看完整说明。"
                         : request.tutorialBannerText().trim());
-        settings.put(
-                "ability_rubric_md",
-                request.abilityRubricMd() == null ? "" : request.abilityRubricMd());
-        audit.record(admin.getId(), "SETTINGS", 0L, "UPDATE", "sla+tutorial+rubric");
+        audit.record(admin.getId(), "SETTINGS", 0L, "UPDATE", "tutorial");
+        return currentSettings();
+    }
+
+    @PutMapping("/settings/sla")
+    public SettingsView updateSlaSettings(@Valid @RequestBody SlaSettingsRequest request) {
+        AuthUser admin = AuthSupport.requireRole(Role.ADMIN);
+        settings.put("review_sla_days", String.valueOf(request.reviewSlaDays()));
+        settings.put("escalate_sla_days", String.valueOf(request.escalateSlaDays()));
+        audit.record(admin.getId(), "SETTINGS", 0L, "UPDATE", "sla");
         return currentSettings();
     }
 
@@ -161,12 +206,41 @@ public class AdminController {
     }
 
     private SettingsView currentSettings() {
+        String apiKey = settings.getRaw("ark_api_key", "");
         return new SettingsView(
                 settings.getInt("review_sla_days", 7),
                 settings.getInt("escalate_sla_days", 14),
                 settings.getString("tutorial_doc_url", ""),
                 settings.getString("tutorial_banner_text", "系统使用教程请参考平台文档，点击查看完整说明。"),
-                settings.getString("ability_rubric_md", ""));
+                settings.getString("ability_rubric_md", ""),
+                settings.getBoolean("ark_enabled", false),
+                maskSecret(apiKey),
+                !apiKey.isBlank(),
+                settings.getRaw("ark_base_url", ""),
+                settings.getRaw("ark_model", ""),
+                settings.getRaw("ra_challenge_ai_prompt", ""));
+    }
+
+    private static String maskSecret(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() <= 4) {
+            return "****";
+        }
+        return "****" + trimmed.substring(trimmed.length() - 4);
+    }
+
+    private static String normalizeArkBaseUrl(String baseUrl) {
+        String normalized = baseUrl.trim();
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        if (normalized.endsWith("/api/plan")) {
+            normalized = normalized + "/v1";
+        }
+        return normalized;
     }
 
     private ReminderView view(Reminder reminder) {
@@ -183,12 +257,35 @@ public class AdminController {
     public record StatusRequest(@NotBlank String status) {
     }
 
-    public record SettingsRequest(
-            @NotNull @Min(0) @Max(60) Integer reviewSlaDays,
-            @NotNull @Min(0) @Max(120) Integer escalateSlaDays,
+    public record ArkSettingsRequest(
+            Boolean arkEnabled,
+            @Size(max = 500) String arkApiKey,
+            Boolean clearArkApiKey,
+            @Size(max = 500) String arkBaseUrl,
+            @Size(max = 200) String arkModel,
+            @Size(max = 200000) String raChallengeAiPrompt
+    ) {
+    }
+
+    public record ArkTestRequest(
+            @Size(max = 500) String arkApiKey,
+            @Size(max = 500) String arkBaseUrl,
+            @Size(max = 200) String arkModel
+    ) {
+    }
+
+    public record RubricSettingsRequest(@Size(max = 200000) String abilityRubricMd) {
+    }
+
+    public record TutorialSettingsRequest(
             @Size(max = 1000) String tutorialDocUrl,
-            @Size(max = 500) String tutorialBannerText,
-            @Size(max = 200000) String abilityRubricMd
+            @Size(max = 500) String tutorialBannerText
+    ) {
+    }
+
+    public record SlaSettingsRequest(
+            @NotNull @Min(0) @Max(60) Integer reviewSlaDays,
+            @NotNull @Min(0) @Max(120) Integer escalateSlaDays
     ) {
     }
 
@@ -197,7 +294,13 @@ public class AdminController {
             int escalateSlaDays,
             String tutorialDocUrl,
             String tutorialBannerText,
-            String abilityRubricMd
+            String abilityRubricMd,
+            boolean arkEnabled,
+            String arkApiKeyMasked,
+            boolean arkApiKeyConfigured,
+            String arkBaseUrl,
+            String arkModel,
+            String raChallengeAiPrompt
     ) {
     }
 

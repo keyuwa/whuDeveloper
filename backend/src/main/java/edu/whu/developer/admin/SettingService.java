@@ -25,6 +25,26 @@ public class SettingService {
                 .orElse(fallback);
     }
 
+    /** Raw stored value including blank; missing key returns fallback. */
+    public String getRaw(String key, String fallback) {
+        return settings.findById(key)
+                .map(SystemSetting::getSettingValue)
+                .map(value -> value == null ? "" : value)
+                .orElse(fallback);
+    }
+
+    public boolean getBoolean(String key, boolean fallback) {
+        return settings.findById(key)
+                .map(SystemSetting::getSettingValue)
+                .map(value -> {
+                    if (value == null || value.isBlank()) {
+                        return fallback;
+                    }
+                    return "true".equalsIgnoreCase(value.trim()) || "1".equals(value.trim());
+                })
+                .orElse(fallback);
+    }
+
     public void put(String key, String value) {
         SystemSetting setting = settings.findById(key).orElseGet(SystemSetting::new);
         setting.setSettingKey(key);

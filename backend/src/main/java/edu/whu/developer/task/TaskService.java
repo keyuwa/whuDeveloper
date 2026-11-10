@@ -15,16 +15,21 @@ import edu.whu.developer.project.Project;
 import edu.whu.developer.project.ProjectRepository;
 import edu.whu.developer.report.WeeklyReportRepository;
 import edu.whu.developer.shortlist.TaskShortlistRepository;
+import edu.whu.developer.task.TaskDtos.PublisherTaskPage;
+import edu.whu.developer.task.TaskDtos.TaskPage;
 import edu.whu.developer.task.TaskDtos.TaskRequest;
 import edu.whu.developer.task.TaskDtos.TaskResponse;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -78,30 +83,41 @@ public class TaskService {
     }
 
     @Transactional(readOnly = true)
-    public List<TaskResponse> listOpen(String roleType,
-                                       String difficulty,
-                                       String techField,
-                                       String supportLanguage,
-                                       String programmingLanguage,
-                                       String scheduleType,
-                                       Integer durationMin,
-                                       Integer durationMax,
-                                       Integer hoursMin,
-                                       Integer hoursMax) {
-        return tasks.searchOpen(
-                        blankToNull(roleType),
-                        blankToNull(difficulty),
-                        blankToNull(techField),
-                        blankToNull(supportLanguage),
-                        blankToNull(programmingLanguage),
-                        blankToNull(scheduleType),
-                        durationMin,
-                        durationMax,
-                        hoursMin,
-                        hoursMax
-                ).stream()
-                .map(task -> toResponse(task, currentOrNull()))
-                .toList();
+    public TaskPage listOpen(String roleType,
+                             String difficulty,
+                             String techField,
+                             String supportLanguage,
+                             String programmingLanguage,
+                             String scheduleType,
+                             Integer durationMin,
+                             Integer durationMax,
+                             Integer hoursMin,
+                             Integer hoursMax,
+                             int page,
+                             int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        var result = tasks.searchOpen(
+                blankToNull(roleType),
+                blankToNull(difficulty),
+                blankToNull(techField),
+                blankToNull(supportLanguage),
+                blankToNull(programmingLanguage),
+                blankToNull(scheduleType),
+                durationMin,
+                durationMax,
+                hoursMin,
+                hoursMax,
+                PageRequest.of(safePage, safeSize)
+        );
+        AuthUser viewer = currentOrNull();
+        return new TaskPage(
+                result.getContent().stream().map(task -> toResponse(task, viewer)).toList(),
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.hasNext()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -115,11 +131,67 @@ public class TaskService {
     }
 
     @Transactional(readOnly = true)
-    public List<TaskResponse> mine() {
+    public PublisherTaskPage mine(String status, String roleType, int page, int size) {
         AuthUser publisher = AuthSupport.requireRole(Role.PUBLISHER);
-        return tasks.findByPublisherIdOrderByIdDesc(publisher.getId()).stream()
-                .map(task -> toResponse(task, publisher))
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        String statusFilter = blankToNull(status);
+        if (statusFilter != null && !Set.of("OPEN", "DRAFT", "CLOSED").contains(statusFilter)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "状态不合法");
+        }
+        String roleFilter = blankToNull(roleType);
+        if (roleFilter != null) {
+            roleFilter = roleFilter.toUpperCase(Locale.ROOT);
+            if (!ROLE_TYPES.contains(roleFilter)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务类型不合法");
+            }
+        }
+        Long publisherId = publisher.getId();
+        var result = tasks.searchMine(publisherId, roleFilter, statusFilter, PageRequest.of(safePage, safeSize));
+        List<Task> pageItems = result.getContent();
+        Map<Long, Long> filledMap = new HashMap<>();
+        Map<Long, Long> pendingMap = new HashMap<>();
+        if (!pageItems.isEmpty()) {
+            List<Long> ids = pageItems.stream().map(Task::getId).toList();
+            for (Object[] row : projects.countGroupedByTaskIdExcludingStatus(ids, "TERMINATED")) {
+                filledMap.put((Long) row[0], (Long) row[1]);
+            }
+            for (Object[] row : applications.countGroupedByTaskIdAndStatus(ids, "SUBMITTED")) {
+                pendingMap.put((Long) row[0], (Long) row[1]);
+            }
+        }
+        List<TaskResponse> items = pageItems.stream()
+                .map(task -> toResponse(
+                        task,
+                        publisher,
+                        filledMap.getOrDefault(task.getId(), 0L),
+                        pendingMap.getOrDefault(task.getId(), 0L)))
                 .toList();
+        long totalAll = roleFilter == null
+                ? tasks.countByPublisherId(publisherId)
+                : tasks.countByPublisherIdAndRoleType(publisherId, roleFilter);
+        long totalOpen = roleFilter == null
+                ? tasks.countByPublisherIdAndStatus(publisherId, "OPEN")
+                : tasks.countByPublisherIdAndRoleTypeAndStatus(publisherId, roleFilter, "OPEN");
+        long totalDraft = roleFilter == null
+                ? tasks.countByPublisherIdAndStatus(publisherId, "DRAFT")
+                : tasks.countByPublisherIdAndRoleTypeAndStatus(publisherId, roleFilter, "DRAFT");
+        long totalClosed = roleFilter == null
+                ? tasks.countByPublisherIdAndStatus(publisherId, "CLOSED")
+                : tasks.countByPublisherIdAndRoleTypeAndStatus(publisherId, roleFilter, "CLOSED");
+        return new PublisherTaskPage(
+                items,
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.hasNext(),
+                totalAll,
+                totalOpen,
+                totalDraft,
+                totalClosed,
+                tasks.countByPublisherIdAndRoleType(publisherId, "TA"),
+                tasks.countByPublisherIdAndRoleType(publisherId, "INTERN"),
+                tasks.countByPublisherIdAndRoleType(publisherId, "RA"));
     }
 
     @Transactional
@@ -137,7 +209,7 @@ public class TaskService {
     }
 
     @Transactional
-    public TaskResponse update(Long id, TaskRequest request) {
+    public TaskResponse update(Long id, TaskRequest request, Boolean publish) {
         Task task = owned(id);
         String previousRole = task.getRoleType();
         apply(task, request);
@@ -146,7 +218,23 @@ public class TaskService {
             task.setRoleSerial(null);
             assignPublicCode(task);
         }
-        audit.record(AuthSupport.current().getId(), "TASK", task.getId(), "UPDATE", task.getTitle());
+        if (Boolean.FALSE.equals(publish)) {
+            task.setStatus("DRAFT");
+            if ("CHALLENGE".equals(task.getPostingMode()) && !"AWARDED".equals(task.getChallengeStatus())) {
+                task.setChallengeStatus(null);
+            }
+        } else if (Boolean.TRUE.equals(publish)) {
+            task.setStatus("OPEN");
+            if ("CHALLENGE".equals(task.getPostingMode())) {
+                task.setChallengeStatus("OPEN");
+            }
+        }
+        audit.record(
+                AuthSupport.current().getId(),
+                "TASK",
+                task.getId(),
+                Boolean.TRUE.equals(publish) ? "PUBLISH" : "UPDATE",
+                task.getTitle());
         return toResponse(task, AuthSupport.current());
     }
 
@@ -154,6 +242,9 @@ public class TaskService {
     public TaskResponse publish(Long id) {
         Task task = owned(id);
         task.setStatus("OPEN");
+        if ("CHALLENGE".equals(task.getPostingMode())) {
+            task.setChallengeStatus("OPEN");
+        }
         audit.record(AuthSupport.current().getId(), "TASK", task.getId(), "PUBLISH", task.getTitle());
         return toResponse(task, AuthSupport.current());
     }
@@ -162,6 +253,9 @@ public class TaskService {
     public TaskResponse close(Long id) {
         Task task = owned(id);
         task.setStatus("CLOSED");
+        if ("CHALLENGE".equals(task.getPostingMode()) && !"AWARDED".equals(task.getChallengeStatus())) {
+            task.setChallengeStatus("CLOSED");
+        }
         audit.record(AuthSupport.current().getId(), "TASK", task.getId(), "CLOSE", task.getTitle());
         return toResponse(task, AuthSupport.current());
     }
@@ -226,19 +320,15 @@ public class TaskService {
         String level = request.difficulty() == null || request.difficulty().isBlank()
                 ? "L3"
                 : request.difficulty().trim().toUpperCase(Locale.ROOT);
-        String support = request.supportLanguages().trim();
         if (!ROLE_TYPES.contains(roleType)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务类型只能是 TA、INTERN 或 RA");
         }
-        Set<String> supportLanguages = dictValues("SUPPORT_LANGUAGE", SUPPORT_LANGUAGES);
+        // 一期不采集支持语言，库字段保留默认值
+        String support = "中文";
         Set<String> techFields = dictValues("TECH_FIELD", TECH_FIELDS);
         Set<String> difficulties = dictValues("DIFFICULTY", LEVELS);
         Set<String> taSchedules = dictValues("TA_SCHEDULE", TA_SCHEDULE_TYPES);
-        Set<String> raSchedules = dictValues("RA_SCHEDULE", RA_SCHEDULE_TYPES);
         Set<String> identities = dictValues("STUDENT_IDENTITY", EDUCATION_LEVELS);
-        if (!supportLanguages.contains(support)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "支持语言不合法");
-        }
         String languages = normalizeCsv(request.programmingLanguages() == null ? "" : request.programmingLanguages());
         String techStack = request.techStack() == null ? "" : request.techStack().trim();
         String educationLevels = normalizeCsv(request.educationLevels() == null ? "" : request.educationLevels());
@@ -290,15 +380,31 @@ public class TaskService {
             if (techStack.isBlank()) {
                 techStack = "科研协作";
             }
-            if (scheduleType == null || !raSchedules.contains(scheduleType)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请选择科研周期");
-            }
+            // 揭榜不强制科研周期；未填则不计学期档
             educationLevels = null;
-            durationWeeks = weeksForSchedule(scheduleType);
+            scheduleType = null;
+            durationWeeks = 16;
         }
         String stipend = request.stipendText().trim();
         if (stipend.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写补助水平");
+        }
+        String output = request.outputRequirement() == null ? "" : request.outputRequirement().trim();
+        String techReq = request.techRequirement() == null ? "" : request.techRequirement().trim();
+        if ("RA".equals(roleType)) {
+            if (output.isBlank()) {
+                output = "提交可落地的研究方案与阶段性产出";
+            }
+            if (techReq.isBlank()) {
+                techReq = "具备相关领域基础研究能力";
+            }
+        } else {
+            if (output.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写产出要求");
+            }
+            if (techReq.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写能力要求");
+            }
         }
         task.setTitle(request.title().trim());
         task.setRoleType(roleType);
@@ -308,12 +414,18 @@ public class TaskService {
         task.setTechStack(techStack);
         task.setProgrammingLanguages(languages);
         task.setSupportLanguages(support);
-        task.setOutputRequirement(request.outputRequirement().trim());
-        task.setTechRequirement(request.techRequirement().trim());
+        task.setOutputRequirement(output);
+        task.setTechRequirement(techReq);
+        Integer estimatedHours = request.estimatedHours();
+        if ("RA".equals(roleType)) {
+            estimatedHours = estimatedHours == null ? 1 : estimatedHours;
+        } else if (estimatedHours == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写预估工时");
+        }
         task.setDurationWeeks(durationWeeks);
         task.setScheduleType(scheduleType);
         task.setEducationLevels(educationLevels);
-        task.setEstimatedHours(request.estimatedHours());
+        task.setEstimatedHours(estimatedHours);
         task.setRepoUrl("INTERN".equals(roleType) ? blankToNull(request.repoUrl()) : null);
         task.setLearningMaterials(blankToNull(request.learningMaterials()));
         task.setStipendText(stipend);
@@ -337,10 +449,34 @@ public class TaskService {
             task.setTechDocFileUrl(techDocFileUrl);
             task.setTechDocFileName(techDocFileUrl == null ? null : blankToNull(request.techDocFileName()));
         }
-        task.setQuota(request.quota());
+        if ("RA".equals(roleType)) {
+            task.setPostingMode("CHALLENGE");
+            task.setBidDeadline(request.bidDeadline());
+            Integer quota = request.quota() == null ? 1 : request.quota();
+            if (quota < 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "名额至少为 1");
+            }
+            task.setQuota(quota);
+            if (!"AWARDED".equals(task.getChallengeStatus()) && !"CLOSED".equals(task.getChallengeStatus())) {
+                task.setChallengeStatus("OPEN");
+            }
+        } else {
+            task.setPostingMode("STANDARD");
+            task.setBidDeadline(null);
+            task.setChallengeStatus(null);
+            task.setQuota(request.quota());
+        }
     }
 
     private TaskResponse toResponse(Task task, AuthUser viewer) {
+        return toResponse(
+                task,
+                viewer,
+                projects.countByTaskIdAndStatusNot(task.getId(), "TERMINATED"),
+                applications.countByTaskIdAndStatus(task.getId(), "SUBMITTED"));
+    }
+
+    private TaskResponse toResponse(Task task, AuthUser viewer, long filled, long pendingApplications) {
         Long applicationId = null;
         String applicationStatus = null;
         Long projectId = null;
@@ -381,9 +517,12 @@ public class TaskService {
                 task.getTechDocFileUrl(),
                 task.getTechDocFileName(),
                 task.getQuota(),
-                projects.countByTaskIdAndStatusNot(task.getId(), "TERMINATED"),
-                applications.countByTaskIdAndStatus(task.getId(), "SUBMITTED"),
+                filled,
+                pendingApplications,
                 task.getStatus(),
+                task.getPostingMode(),
+                task.getBidDeadline(),
+                task.getChallengeStatus(),
                 task.getPublisher().getId(),
                 task.getPublisher().getRealName() == null ? task.getPublisher().getDisplayName() : task.getPublisher().getRealName(),
                 task.getCreatedAt(),

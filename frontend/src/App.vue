@@ -44,7 +44,9 @@ const selectedKeys = computed(() => {
   if (path.startsWith('/publisher/tasks')) return ['/publisher/tasks']
   if (path.startsWith('/publisher/inbox') || path.startsWith('/publisher/projects')) return ['/publisher/inbox']
   if (path.startsWith('/admin/')) {
-    const hit = adminMenus.find((item) => path.startsWith(item.key))
+    const hit = [...adminMenus]
+      .sort((a, b) => b.key.length - a.key.length)
+      .find((item) => path === item.key || path.startsWith(`${item.key}/`))
     return hit ? [hit.key] : [path]
   }
   return [path]
@@ -119,7 +121,7 @@ const publisherTabs = computed<TabItem[]>(() => [
 
 const guestTabs: TabItem[] = [
   { key: '/', label: '职位', icon: 'jobs', match: (path) => path === '/' },
-  { key: '/ability', label: '能力', icon: 'topdev', match: (path) => path.startsWith('/ability') },
+  { key: '/ability', label: 'Top Dev', icon: 'topdev', match: (path) => path.startsWith('/ability') },
   { key: '/auth/login', label: '登录', icon: 'login', match: (path) => path.startsWith('/auth') },
 ]
 
@@ -279,8 +281,28 @@ watch(isMobile, (mobile) => {
   document.documentElement.classList.toggle('is-mobile', mobile)
 })
 
-function onMenuClick(key: string) {
+function publisherTasksTarget() {
+  const roleType = String(sessionStorage.getItem('publisher.tasks.roleType') || '').toUpperCase()
+  const status = String(sessionStorage.getItem('publisher.tasks.status') || '').toUpperCase()
+  return {
+    path: '/publisher/tasks',
+    query: {
+      ...(roleType === 'TA' || roleType === 'INTERN' || roleType === 'RA' ? { roleType } : {}),
+      ...(status === 'OPEN' || status === 'DRAFT' || status === 'CLOSED' || status === 'ALL' ? { status } : {}),
+    },
+  }
+}
+
+function goNav(key: string) {
+  if (key === '/publisher/tasks') {
+    router.push(publisherTasksTarget())
+    return
+  }
   router.push(key)
+}
+
+function onMenuClick(key: string) {
+  goNav(key)
 }
 
 function onLogout() {
@@ -391,7 +413,7 @@ function formatTime(value: string) {
         type="button"
         class="tab-item"
         :class="{ active: activeTabKey === item.key }"
-        @click="router.push(item.key)"
+        @click="goNav(item.key)"
       >
         <span class="tab-icon" aria-hidden="true">
           <!-- 职位 / 广场 -->

@@ -1,0 +1,72 @@
+=== WHU functional + load test @ http://localhost:8081 ===
+time: 2026-11-06 16:16:33
+
+## 1. Auth / boundary
+PASS  student login (HTTP 200)
+PASS  publisher login (HTTP 200)
+PASS  admin login (HTTP 200)
+PASS  bad password rejected (HTTP 401)
+PASS  unauth /me (HTTP 401)
+PASS  student /me (HTTP 200)
+PASS  student role=STUDENT
+PASS  student blocked from publisher create (HTTP 400)
+
+## 2. Student plaza / shortlist / chat
+PASS  list open tasks (HTTP 200)
+INFO  open tasks=4
+PASS  picked task id=8
+PASS  get task detail (HTTP 200)
+PASS  add shortlist (HTTP 200)
+PASS  list shortlists (HTTP 200)
+PASS  open message thread (HTTP 200)
+PASS  get resume (HTTP 200)
+INFO  resumeReady=True
+PASS  submit application task=8
+PASS  duplicate apply rejected (HTTP 409)
+SKIP  empty proposal got HTTP 409 (may already applied)
+PASS  my applications (HTTP 200)
+PASS  my projects (HTTP 200)
+PASS  message inbox (HTTP 200)
+
+## 3. Publisher tasks / review
+PASS  publisher task list (HTTP 200)
+FAIL  create draft task (want 200 got 400) {"message":"请上传需求文档 PDF"}
+PASS  invalid task rejected
+PASS  publisher inbox (HTTP 200)
+INFO  pending applications=1
+SKIP  have SUBMITTED id=5 — leave for manual product flow (avoid breaking student project)
+PASS  pending-count (HTTP 200)
+
+## 4. Admin
+PASS  admin users (HTTP 200)
+PASS  admin tasks (HTTP 200)
+PASS  admin settings (HTTP 200)
+PASS  public dicts (HTTP 200)
+PASS  health (HTTP 200)
+PASS  ability leaderboard (HTTP 200)
+PASS  student blocked from admin (HTTP 403)
+
+## 5. Load: seed OPEN tasks then measure lists
+INFO  open tasks before seed=4
+INFO  seeding 200 OPEN tasks (publisher)
+INFO  seeded 50/200 ok=0 fail=50
+INFO  seeded 100/200 ok=0 fail=100
+INFO  seeded 150/200 ok=0 fail=150
+INFO  seeded 200/200 ok=0 fail=200
+INFO  seed done ok=0 fail=200
+FAIL  seed created 0 tasks
+
+## 6. Load: measure list endpoints (3 samples)
+PERF  GET /tasks #1 http=200 time=0.025302s bytes=3578 items=4
+PERF  GET /tasks #2 http=200 time=0.016585s bytes=3578 items=4
+PERF  GET /tasks #3 http=200 time=0.017699s bytes=3578 items=4
+PERF  GET /publisher/tasks http=200 time=0.014185s bytes=4382 items=5
+PERF  GET /admin/tasks http=200 time=0.014625s bytes=4382 items=5
+PERF  GET /admin/users http=200 time=0.009991s bytes=1253 items=3
+PERF  GET /publisher/applications http=200 time=0.012971s bytes=2175 items=3
+PERF  GET /me/shortlists http=200 time=0.013102s bytes=918 items=1
+PERF  GET /messages http=200 time=0.014052s bytes=832 items=4
+PERF  GET /ability/leaderboard http=200 time=0.010762s bytes=149 items=1
+PERF  threshold /tasks http=200 time=0.020193s bytes=3578 items=4
+
+=== SUMMARY PASS=31 FAIL=2 SKIP=2 ===

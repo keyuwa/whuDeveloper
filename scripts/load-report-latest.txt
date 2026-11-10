@@ -1,0 +1,20 @@
+open tasks before=5
+seed done ok=200 fail=0
+=== measures ===
+GET /tasks #1 | http=200 time=0.167s size=197248B (192.6KB) items=205
+GET /tasks #2 | http=200 time=0.145s size=197248B (192.6KB) items=205
+GET /tasks #3 | http=200 time=0.140s size=197248B (192.6KB) items=205
+GET /publisher/tasks | http=200 time=0.075s size=198893B (194.2KB) items=207
+GET /admin/tasks | http=200 time=0.071s size=198893B (194.2KB) items=207
+GET /admin/users | http=200 time=0.008s size=1253B (1.2KB) items=3
+GET /publisher/applications | http=200 time=0.011s size=2196B (2.1KB) items=3
+GET /me/shortlists | http=200 time=0.014s size=918B (0.9KB) items=1
+GET /messages | http=200 time=0.015s size=832B (0.8KB) items=4
+seeding extra 800 to approach ~1000...
+=== measures @ ~1000 ===
+GET /tasks @1k #1 | http=200 time=0.764s size=841989B (822.3KB) items=1005
+GET /tasks @1k #2 | http=200 time=0.654s size=841989B (822.3KB) items=1005
+GET /tasks @1k #3 | http=200 time=0.636s size=841989B (822.3KB) items=1005
+GET /publisher/tasks @1k | http=200 time=0.292s size=843634B (823.9KB) items=1007
+GET /admin/tasks @1k | http=200 time=0.298s size=843634B (823.9KB) items=1007
+DONE

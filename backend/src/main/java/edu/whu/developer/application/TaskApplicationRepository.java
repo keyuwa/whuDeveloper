@@ -1,7 +1,10 @@
 package edu.whu.developer.application;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,4 +27,14 @@ public interface TaskApplicationRepository extends JpaRepository<TaskApplication
     long countByTask_Publisher_IdAndStatus(Long publisherId, String status);
 
     void deleteByTaskId(Long taskId);
+
+    @Query("""
+            SELECT a.task.id, COUNT(a) FROM TaskApplication a
+            WHERE a.task.id IN :taskIds AND a.status = :status
+            GROUP BY a.task.id
+            """)
+    List<Object[]> countGroupedByTaskIdAndStatus(
+            @Param("taskIds") Collection<Long> taskIds,
+            @Param("status") String status
+    );
 }

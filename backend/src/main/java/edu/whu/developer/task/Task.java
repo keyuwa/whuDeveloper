@@ -119,6 +119,18 @@ public class Task {
     @Column(nullable = false, length = 32)
     private String status;
 
+    /** STANDARD | CHALLENGE（揭榜） */
+    @Column(name = "posting_mode", nullable = false, length = 16)
+    private String postingMode = "STANDARD";
+
+    /** 揭榜截止时间；仅 CHALLENGE 使用 */
+    @Column(name = "bid_deadline")
+    private LocalDateTime bidDeadline;
+
+    /** OPEN | SELECTING | AWARDED | CLOSED；仅 CHALLENGE 使用 */
+    @Column(name = "challenge_status", length = 16)
+    private String challengeStatus;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -137,6 +149,9 @@ public class Task {
         }
         if (roleType == null) {
             roleType = "INTERN";
+        }
+        if (postingMode == null) {
+            postingMode = "STANDARD";
         }
     }
 

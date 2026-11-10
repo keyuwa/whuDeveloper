@@ -27,8 +27,8 @@ onMounted(async () => {
   <section class="rubric-page">
     <header class="page-head">
       <div>
-        <h1 class="page-title">能力裁定细则</h1>
-        <p class="subtitle">WHU TOP Developer 统一能力标准与申请流程说明。</p>
+        <h1 class="page-title">等级评定细则</h1>
+        <p class="subtitle">一期预览标准：LV0–LV5 申请与裁定将在二期开放，当前 Top Dev 仅展示积分。</p>
       </div>
       <a-button type="outline" @click="router.push('/ability')">返回 Top Dev</a-button>
     </header>

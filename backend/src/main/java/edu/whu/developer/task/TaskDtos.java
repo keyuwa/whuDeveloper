@@ -21,13 +21,13 @@ public final class TaskDtos {
             @NotBlank(message = "请填写背景与目标") String background,
             @Size(max = 300) String techStack,
             @Size(max = 300) String programmingLanguages,
-            @NotBlank(message = "请选择支持语言") @Size(max = 64) String supportLanguages,
-            @NotBlank(message = "请填写产出要求") String outputRequirement,
-            @NotBlank(message = "请填写能力要求") String techRequirement,
+            @Size(max = 64) String supportLanguages,
+            String outputRequirement,
+            String techRequirement,
             @Min(1) @Max(52) Integer durationWeeks,
             @Size(max = 32) String scheduleType,
             @Size(max = 64) String educationLevels,
-            @NotNull(message = "请填写预估工时") @Min(1) @Max(40) Integer estimatedHours,
+            @Min(1) @Max(40) Integer estimatedHours,
             @Size(max = 500) String repoUrl,
             String learningMaterials,
             @NotBlank(message = "请填写补助水平") @Size(max = 500) String stipendText,
@@ -37,7 +37,34 @@ public final class TaskDtos {
             String techDocMd,
             @Size(max = 500) String techDocFileUrl,
             @Size(max = 255) String techDocFileName,
-            @NotNull(message = "请填写名额") @Min(1) @Max(50) Integer quota
+            @NotNull(message = "请填写名额") @Min(1) @Max(50) Integer quota,
+            LocalDateTime bidDeadline
+    ) {
+    }
+
+    public record TaskPage(
+            java.util.List<TaskResponse> items,
+            int page,
+            int size,
+            long total,
+            boolean hasMore
+    ) {
+    }
+
+    /** 发布方「我的任务」分页，附带类型/状态总数供 Tab 展示。 */
+    public record PublisherTaskPage(
+            java.util.List<TaskResponse> items,
+            int page,
+            int size,
+            long total,
+            boolean hasMore,
+            long totalAll,
+            long totalOpen,
+            long totalDraft,
+            long totalClosed,
+            long totalTa,
+            long totalIntern,
+            long totalRa
     ) {
     }
 
@@ -71,6 +98,9 @@ public final class TaskDtos {
             long filled,
             long pendingApplications,
             String status,
+            String postingMode,
+            LocalDateTime bidDeadline,
+            String challengeStatus,
             Long publisherId,
             String publisherName,
             LocalDateTime createdAt,

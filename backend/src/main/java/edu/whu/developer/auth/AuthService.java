@@ -132,11 +132,9 @@ public class AuthService {
         if (role == Role.ADMIN) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "管理员账号不能自助注册");
         }
-        if (role == Role.STUDENT && !EmailDomain.isStudent(email)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "学生邮箱需要使用 .edu.cn");
-        }
-        if (role == Role.PUBLISHER && !EmailDomain.isPublisher(email)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "发布方邮箱需要使用 .whu.edu.cn");
+        // 允许普通邮箱注册；校园邮箱仅作产品侧推荐，不再强制域名。
+        if (email == null || !email.contains("@") || email.startsWith("@") || email.endsWith("@")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "邮箱格式不正确");
         }
     }
 

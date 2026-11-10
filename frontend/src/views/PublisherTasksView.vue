@@ -1,17 +1,89 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
 import { api } from '../api'
 import { useIsMobile } from '../composables/useDevice'
-import { TASK_ROLE_LABEL, type Project, type Task } from '../types'
+import { TASK_ROLE_LABEL, TASK_ROLE_TYPES, type Project, type PublisherTaskPage, type Task } from '../types'
 
+const PAGE_SIZE = 20
+const route = useRoute()
 const router = useRouter()
 const isMobile = useIsMobile()
 const tasks = ref<Task[]>([])
 const projects = ref<Project[]>([])
 const loading = ref(false)
-const statusTab = ref<'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED'>('ALL')
+const loadingMore = ref(false)
+const page = ref(0)
+const total = ref(0)
+const hasMore = ref(false)
+
+const ROLE_STORAGE_KEY = 'publisher.tasks.roleType'
+const STATUS_STORAGE_KEY = 'publisher.tasks.status'
+
+function parseRoleTab(value: unknown): 'TA' | 'INTERN' | 'RA' | null {
+  const normalized = String(value || '').toUpperCase()
+  return normalized === 'TA' || normalized === 'INTERN' || normalized === 'RA' ? normalized : null
+}
+
+function parseStatusTab(value: unknown): 'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED' | null {
+  const normalized = String(value || '').toUpperCase()
+  return normalized === 'OPEN' || normalized === 'DRAFT' || normalized === 'CLOSED' || normalized === 'ALL'
+    ? normalized
+    : null
+}
+
+function initialRoleTab(): 'TA' | 'INTERN' | 'RA' {
+  return (
+    parseRoleTab(route.query.roleType) ||
+    parseRoleTab(sessionStorage.getItem(ROLE_STORAGE_KEY)) ||
+    'INTERN'
+  )
+}
+
+function initialStatusTab(): 'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED' {
+  return (
+    parseStatusTab(route.query.status) ||
+    parseStatusTab(sessionStorage.getItem(STATUS_STORAGE_KEY)) ||
+    'ALL'
+  )
+}
+
+const roleTab = ref<'TA' | 'INTERN' | 'RA'>(initialRoleTab())
+const statusTab = ref<'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED'>(initialStatusTab())
+const statusCounts = ref({ ALL: 0, OPEN: 0, DRAFT: 0, CLOSED: 0 })
+const roleCounts = ref({ TA: 0, INTERN: 0, RA: 0 })
+const loadMoreSentinel = ref<HTMLElement | null>(null)
+let loadMoreObserver: IntersectionObserver | null = null
+let syncingQuery = false
+const showPcPager = computed(() => !isMobile.value && total.value > PAGE_SIZE)
+
+function rememberListTabs() {
+  sessionStorage.setItem(ROLE_STORAGE_KEY, roleTab.value)
+  sessionStorage.setItem(STATUS_STORAGE_KEY, statusTab.value)
+}
+
+function syncListQuery() {
+  rememberListTabs()
+  syncingQuery = true
+  void router.replace({
+    path: '/publisher/tasks',
+    query: {
+      roleType: roleTab.value,
+      status: statusTab.value,
+    },
+  }).finally(() => {
+    syncingQuery = false
+  })
+}
+
+function listQuery(extra: Record<string, string> = {}) {
+  return {
+    roleType: roleTab.value,
+    status: statusTab.value,
+    ...extra,
+  }
+}
 
 const statusLabel: Record<string, string> = {
   DRAFT: '草稿',
@@ -46,52 +118,151 @@ const projectsByTask = computed(() => {
   return map
 })
 
-const statusCounts = computed(() => {
-  const counts = { ALL: tasks.value.length, OPEN: 0, DRAFT: 0, CLOSED: 0 }
-  for (const task of tasks.value) {
-    if (task.status === 'OPEN') counts.OPEN += 1
-    else if (task.status === 'DRAFT') counts.DRAFT += 1
-    else if (task.status === 'CLOSED') counts.CLOSED += 1
-  }
-  return counts
-})
-
-const filteredTasks = computed(() => {
-  if (statusTab.value === 'ALL') return tasks.value
-  return tasks.value.filter((task) => task.status === statusTab.value)
-})
-
 const emptyDescription = computed(() => {
-  if (statusTab.value === 'OPEN') return '暂无已发布任务'
-  if (statusTab.value === 'DRAFT') return '暂无草稿'
-  if (statusTab.value === 'CLOSED') return '暂无已下架任务'
-  return '还没有任务'
+  const role = TASK_ROLE_LABEL[roleTab.value] || roleTab.value
+  if (statusTab.value === 'OPEN') return `暂无已发布的${role}`
+  if (statusTab.value === 'DRAFT') return `暂无${role}草稿`
+  if (statusTab.value === 'CLOSED') return `暂无已下架的${role}`
+  return `还没有${role}`
 })
 
-async function load() {
-  const [taskList, projectList] = await Promise.all([
-    api<Task[]>('/api/v1/publisher/tasks'),
-    api<Project[]>('/api/v1/projects'),
-  ])
-  tasks.value = taskList
-  projects.value = projectList
+function statusQuery() {
+  return statusTab.value === 'ALL' ? '' : statusTab.value
 }
 
-onMounted(async () => {
-  loading.value = true
+async function fetchProjects() {
+  projects.value = await api<Project[]>('/api/v1/projects')
+}
+
+async function fetchPage(nextPage: number, append: boolean) {
+  const status = statusQuery()
+  const qs = new URLSearchParams({
+    page: String(nextPage),
+    size: String(PAGE_SIZE),
+    roleType: roleTab.value,
+  })
+  if (status) qs.set('status', status)
+  const result = await api<PublisherTaskPage>(`/api/v1/publisher/tasks?${qs}`)
+  tasks.value = append ? [...tasks.value, ...result.items] : result.items
+  page.value = result.page
+  total.value = result.total
+  hasMore.value = result.hasMore
+  statusCounts.value = {
+    ALL: result.totalAll,
+    OPEN: result.totalOpen,
+    DRAFT: result.totalDraft,
+    CLOSED: result.totalClosed,
+  }
+  roleCounts.value = {
+    TA: result.totalTa,
+    INTERN: result.totalIntern,
+    RA: result.totalRa,
+  }
+}
+
+async function load(reset = true) {
+  if (reset) {
+    loading.value = true
+    page.value = 0
+    total.value = 0
+    hasMore.value = false
+  }
   try {
-    await load()
+    await Promise.all([fetchPage(0, false), fetchProjects()])
   } catch (cause) {
     Message.error(cause instanceof Error ? cause.message : '加载失败')
   } finally {
     loading.value = false
+    await nextTick()
+    bindLoadMore()
   }
+}
+
+async function loadMore() {
+  if (!isMobile.value || loading.value || loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  try {
+    await fetchPage(page.value + 1, true)
+  } catch (cause) {
+    Message.error(cause instanceof Error ? cause.message : '加载更多失败')
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+async function onPcPageChange(current: number) {
+  if (isMobile.value) return
+  loading.value = true
+  try {
+    await fetchPage(Math.max(current - 1, 0), false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  } catch (cause) {
+    Message.error(cause instanceof Error ? cause.message : '翻页失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function bindLoadMore() {
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
+  if (!isMobile.value) return
+  const el = loadMoreSentinel.value
+  if (!el) return
+  loadMoreObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore()
+    },
+    { root: null, rootMargin: '240px 0px', threshold: 0 },
+  )
+  loadMoreObserver.observe(el)
+}
+
+watch(statusTab, () => {
+  if (syncingQuery) return
+  syncListQuery()
+  void load(true)
+})
+
+watch(roleTab, () => {
+  if (syncingQuery) return
+  if (statusTab.value !== 'ALL') {
+    statusTab.value = 'ALL'
+    return
+  }
+  syncListQuery()
+  void load(true)
+})
+
+watch(
+  () => [route.query.roleType, route.query.status] as const,
+  () => {
+    if (syncingQuery) return
+    const nextRole = initialRoleTab()
+    const nextStatus = initialStatusTab()
+    if (roleTab.value === nextRole && statusTab.value === nextStatus) return
+    syncingQuery = true
+    roleTab.value = nextRole
+    statusTab.value = nextStatus
+    syncingQuery = false
+    void load(true)
+  },
+)
+
+onMounted(() => {
+  syncListQuery()
+  void load(true)
+})
+
+onUnmounted(() => {
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
 })
 
 async function act(id: number, action: 'publish' | 'close') {
   try {
     await api(`/api/v1/publisher/tasks/${id}/${action}`, { method: 'POST' })
-    await load()
+    await load(true)
     Message.success(action === 'publish' ? '已发布' : '已下架')
   } catch (cause) {
     Message.error(cause instanceof Error ? cause.message : '操作失败')
@@ -113,7 +284,7 @@ function removeTask(task: Task) {
       try {
         await api(`/api/v1/publisher/tasks/${task.id}`, { method: 'DELETE' })
         Message.success('已删除')
-        await load()
+        await load(true)
       } catch (cause) {
         Message.error(cause instanceof Error ? cause.message : '删除失败')
         throw cause
@@ -137,11 +308,29 @@ function openInbox(taskId?: number) {
       </div>
       <a-space wrap>
         <a-button size="small" @click="openInbox()">全部申请</a-button>
-        <a-button type="primary" size="small" @click="router.push('/publisher/tasks/new')">
+        <a-button
+          type="primary"
+          size="small"
+          @click="router.push({ path: '/publisher/tasks/new', query: listQuery() })"
+        >
           {{ isMobile ? '新建任务' : '发布任务' }}
         </a-button>
       </a-space>
     </header>
+
+    <nav class="role-tabs" :class="{ compact: isMobile }" aria-label="任务类型">
+      <button
+        v-for="item in TASK_ROLE_TYPES"
+        :key="item.value"
+        type="button"
+        class="role-tab"
+        :class="{ active: roleTab === item.value }"
+        @click="roleTab = item.value"
+      >
+        <span class="role-name">{{ item.label }}</span>
+        <span class="role-count">{{ roleCounts[item.value] }}</span>
+      </button>
+    </nav>
 
     <a-tabs
       v-model:active-key="statusTab"
@@ -156,93 +345,228 @@ function openInbox(taskId?: number) {
     </a-tabs>
 
     <a-spin :loading="loading" style="width: 100%">
-      <a-empty v-if="!loading && filteredTasks.length === 0" :description="emptyDescription" />
+      <a-empty v-if="!loading && tasks.length === 0" :description="emptyDescription" />
       <div v-else class="stack">
-        <a-card v-for="task in filteredTasks" :key="task.id" class="task-card">
-          <div class="task-row">
-            <div class="task-main">
-              <a-space wrap style="margin-bottom: 8px">
-                <a-tag size="small">{{ task.publicCode }}</a-tag>
-                <a-tag color="arcoblue" size="small">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
-                <a-tag v-if="task.roleType !== 'TA'" size="small">{{ task.techField }}</a-tag>
-                <a-tag v-if="task.roleType === 'INTERN'" size="small">{{ task.difficulty }}</a-tag>
-                <a-tag :color="statusColor[task.status] || 'gray'" size="small">
-                  {{ statusLabel[task.status] || task.status }}
-                </a-tag>
-                <a-tag v-if="(task.pendingApplications || 0) > 0" color="orange" size="small">
-                  待审 {{ task.pendingApplications }}
-                </a-tag>
-              </a-space>
-              <a-typography-title :heading="6" style="margin: 0 0 4px">{{ task.title }}</a-typography-title>
-              <a-typography-text type="secondary">
-                已入项 {{ task.filled }}/{{ task.quota }}
-                <template v-if="(task.pendingApplications || 0) > 0"> · 待审申请 {{ task.pendingApplications }}</template>
-                · {{ task.programmingLanguages }} · {{ task.durationWeeks }} 周
-                <template v-if="task.stipendText"> · {{ task.stipendText }}</template>
-              </a-typography-text>
+        <a-card v-for="task in tasks" :key="task.id" class="task-card">
+          <div class="task-body">
+            <a-space wrap style="margin-bottom: 8px">
+              <a-tag size="small">{{ task.publicCode }}</a-tag>
+              <a-tag color="arcoblue" size="small">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
+              <a-tag v-if="task.roleType !== 'TA'" size="small">{{ task.techField }}</a-tag>
+              <a-tag v-if="task.roleType === 'INTERN'" size="small">{{ task.difficulty }}</a-tag>
+              <a-tag :color="statusColor[task.status] || 'gray'" size="small">
+                {{ statusLabel[task.status] || task.status }}
+              </a-tag>
+              <a-tag v-if="(task.pendingApplications || 0) > 0" color="orange" size="small">
+                待审 {{ task.pendingApplications }}
+              </a-tag>
+            </a-space>
+            <a-typography-title :heading="6" style="margin: 0 0 4px">{{ task.title }}</a-typography-title>
+            <a-typography-text type="secondary">
+              已入项 {{ task.filled }}/{{ task.quota }}
+              <template v-if="(task.pendingApplications || 0) > 0"> · 待审申请 {{ task.pendingApplications }}</template>
+              <template v-if="task.roleType === 'INTERN'"> · {{ task.programmingLanguages }} · {{ task.durationWeeks }} 周</template>
+              <template v-if="task.stipendText"> · {{ task.stipendText }}</template>
+            </a-typography-text>
 
-              <div v-if="(projectsByTask.get(task.id) || []).length" class="enrolled">
-                <div class="enrolled-title">已接收学生</div>
-                <div
-                  v-for="item in projectsByTask.get(task.id)"
-                  :key="item.id"
-                  class="enrolled-row"
-                >
-                  <div>
-                    <strong>{{ item.studentName }}</strong>
-                    <span class="muted"> · {{ projectStatusLabel[item.status] || item.status }}</span>
-                  </div>
-                  <a-button
-                    size="mini"
-                    type="text"
-                    @click="router.push(`/publisher/projects/${item.id}/detail`)"
-                  >
-                    进入协作
-                  </a-button>
+            <div v-if="(projectsByTask.get(task.id) || []).length" class="enrolled">
+              <div class="enrolled-title">已接收学生</div>
+              <div
+                v-for="item in projectsByTask.get(task.id)"
+                :key="item.id"
+                class="enrolled-row"
+              >
+                <div>
+                  <strong>{{ item.studentName }}</strong>
+                  <span class="muted"> · {{ projectStatusLabel[item.status] || item.status }}</span>
                 </div>
-              </div>
-              <div v-else-if="task.status === 'OPEN'" class="enrolled empty-hint">
-                暂无学生入项；有人申请后会出现在「审阅」，通过后显示在这里。
+                <a-button
+                  size="mini"
+                  type="text"
+                  @click="router.push(`/publisher/projects/${item.id}/detail`)"
+                >
+                  进入协作
+                </a-button>
               </div>
             </div>
-            <a-space wrap>
+            <div v-else-if="task.status === 'OPEN'" class="enrolled empty-hint">
+              暂无学生入项；有人申请后会出现在「审阅」，通过后显示在这里。
+            </div>
+          </div>
+
+          <div class="task-footer">
+            <div class="actions-manage">
               <a-button
-                v-if="(task.pendingApplications || 0) > 0 || task.filled > 0"
-                type="outline"
-                status="warning"
-                @click="openInbox(task.id)"
+                size="small"
+                @click="router.push({ path: `/publisher/tasks/${task.id}`, query: listQuery() })"
               >
-                {{ (task.pendingApplications || 0) > 0 ? `审阅申请 (${task.pendingApplications})` : '查看申请' }}
+                编辑
               </a-button>
-              <a-button @click="router.push(`/publisher/tasks/${task.id}`)">编辑</a-button>
-              <a-button v-if="task.status !== 'OPEN'" type="primary" @click="act(task.id, 'publish')">发布</a-button>
-              <a-button v-else @click="act(task.id, 'close')">下架</a-button>
-              <a-button v-if="canDelete(task)" type="outline" status="danger" @click="removeTask(task)">
+              <a-button
+                v-if="task.status === 'OPEN'"
+                size="small"
+                @click="act(task.id, 'close')"
+              >
+                下架
+              </a-button>
+              <a-button
+                v-if="canDelete(task)"
+                size="small"
+                status="danger"
+                @click="removeTask(task)"
+              >
                 删除
               </a-button>
-            </a-space>
+            </div>
+            <div class="actions-primary">
+              <a-button
+                v-if="(task.pendingApplications || 0) > 0"
+                type="primary"
+                size="small"
+                @click="openInbox(task.id)"
+              >
+                审阅申请 · {{ task.pendingApplications }}
+              </a-button>
+              <a-button
+                v-else-if="task.filled > 0"
+                type="outline"
+                size="small"
+                @click="openInbox(task.id)"
+              >
+                查看申请
+              </a-button>
+              <a-button
+                v-if="task.status !== 'OPEN'"
+                type="primary"
+                size="small"
+                @click="act(task.id, 'publish')"
+              >
+                {{ task.status === 'DRAFT' ? '发布' : '重新发布' }}
+              </a-button>
+            </div>
           </div>
         </a-card>
+        <div
+          v-if="isMobile && (tasks.length || hasMore)"
+          ref="loadMoreSentinel"
+          class="load-more-sentinel"
+          aria-hidden="true"
+        />
+        <div v-if="isMobile && loadingMore" class="load-more-status">加载更多…</div>
+        <div v-else-if="isMobile && tasks.length && !hasMore" class="load-more-status muted">已经到底了</div>
+        <div v-if="showPcPager" class="pager">
+          <a-pagination
+            :total="total"
+            :current="page + 1"
+            :page-size="PAGE_SIZE"
+            show-total
+            @change="onPcPageChange"
+          />
+        </div>
       </div>
     </a-spin>
   </section>
 </template>
 
 <style scoped>
+.role-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 12px;
+}
+.role-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.role-tab:hover {
+  border-color: #bfdbfe;
+}
+.role-tab.active {
+  border-color: #2563eb;
+  background: linear-gradient(180deg, #eff6ff 0%, #fff 70%);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.1);
+}
+.role-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+.role-tab.active .role-name {
+  color: #1d4ed8;
+}
+.role-count {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 600;
+}
+.role-tabs.compact {
+  gap: 8px;
+}
+.role-tabs.compact .role-tab {
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+.role-tabs.compact .role-name {
+  font-size: 13px;
+}
 .status-tabs {
   margin: 4px 0 14px;
 }
-.task-card { border: 1px solid #eef2f7; width: 100%; }
-.task-card :deep(.arco-card-body) { width: 100%; }
-.task-row {
+.task-card {
+  border: 1px solid #eef2f7;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.task-card :deep(.arco-card-body) {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 16px 18px;
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 14px;
+}
+.task-body {
+  min-width: 0;
   width: 100%;
 }
-.task-main { min-width: 0; flex: 1; width: 100%; }
+.task-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-top: 12px;
+  border-top: 1px solid #eef2f7;
+}
+.actions-primary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+.actions-manage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
 .enrolled {
   margin-top: 14px;
   padding: 12px 14px;
@@ -282,27 +606,39 @@ function openInbox(taskId?: number) {
 .publisher-mobile .task-card {
   width: 100%;
 }
-.publisher-mobile .task-row {
-  flex-direction: column;
-  align-items: stretch;
-}
-.publisher-mobile .task-main {
-  width: 100%;
-  max-width: 100%;
-  flex: none;
-}
 .publisher-mobile .enrolled {
   margin-top: 12px;
   width: 100%;
 }
+.load-more-sentinel {
+  height: 1px;
+  width: 100%;
+}
+.load-more-status {
+  text-align: center;
+  padding: 12px 0 4px;
+  font-size: 13px;
+  color: #6b7280;
+}
+.load-more-status.muted {
+  color: #9ca3af;
+}
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0 4px;
+}
 @media (max-width: 700px) {
-  .task-row {
+  .task-footer {
     flex-direction: column;
     align-items: stretch;
   }
-  .task-main {
+  .actions-primary {
+    margin-left: 0;
     width: 100%;
-    flex: none;
+  }
+  .actions-primary :deep(.arco-btn) {
+    flex: 1;
   }
 }
 </style>

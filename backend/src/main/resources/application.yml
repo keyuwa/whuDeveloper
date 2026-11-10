@@ -38,3 +38,8 @@ app:
     from: ${APP_MAIL_FROM:noreply@whudev.org}
   reminder:
     scan-ms: ${APP_REMINDER_SCAN_MS:60000}
+  ark:
+    enabled: ${APP_ARK_ENABLED:false}
+    api-key: ${ARK_API_KEY:}
+    base-url: ${ARK_BASE_URL:}
+    model: ${ARK_MODEL:}

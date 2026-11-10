@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
 import { auth } from '../auth'
 import { useIsMobile } from '../composables/useDevice'
 import { loadDicts, dictOptions, scheduleLabelMap } from '../composables/useDicts'
-import { TASK_ROLE_LABEL, TASK_ROLE_TYPES, type Task } from '../types'
+import { TASK_ROLE_LABEL, TASK_ROLE_TYPES, type Task, type TaskPage } from '../types'
 
 const isMobile = useIsMobile()
+const PAGE_SIZE = 20
 
 type FilterKey =
   | 'techFields'
-  | 'supportLanguages'
   | 'programmingLanguages'
   | 'durations'
   | 'scheduleTypes'
@@ -29,13 +29,20 @@ interface SelectedChip {
 const router = useRouter()
 const sourceTasks = ref<Task[]>([])
 const loading = ref(false)
+const loadingMore = ref(false)
+const page = ref(0)
+const hasMore = ref(true)
+const totalCount = ref(0)
+const showPcPager = computed(() => !isMobile.value && totalCount.value > PAGE_SIZE)
+const loadError = ref(false)
 const activeModule = ref<'TA' | 'INTERN' | 'RA'>('INTERN')
 const filterDrawerVisible = ref(false)
+const loadMoreSentinel = ref<HTMLElement | null>(null)
+let loadMoreObserver: IntersectionObserver | null = null
 const tutorialDocUrl = ref('')
 const tutorialBannerText = ref('系统使用教程请参考平台文档，点击查看完整说明。')
 const filters = reactive({
   techFields: [] as string[],
-  supportLanguages: [] as string[],
   programmingLanguages: [] as string[],
   durations: [] as string[],
   scheduleTypes: [] as string[],
@@ -51,15 +58,13 @@ const modules = TASK_ROLE_TYPES.map((item) => ({
     item.value === 'TA'
       ? '助教任务：课程支持、答疑与教学协作'
       : item.value === 'RA'
-        ? '科研任务：课题研究、实验与论文相关协作'
+        ? '科研任务：以揭榜形式开放方向，学生提交方案竞标'
         : '开发任务：产品功能、工程实现与开源贡献',
 }))
 
 const techOptions = dictOptions('TECH_FIELD')
-const supportOptions = dictOptions('SUPPORT_LANGUAGE')
 const durationOptions = dictOptions('DURATION_RANGE')
 const taScheduleOptions = dictOptions('TA_SCHEDULE')
-const raScheduleOptions = dictOptions('RA_SCHEDULE')
 const weeklyOptions = dictOptions('WEEKLY_HOURS_RANGE')
 const educationOptions = dictOptions('STUDENT_IDENTITY')
 const languageOptions = dictOptions('PROGRAMMING_LANGUAGE')
@@ -77,17 +82,11 @@ interface FilterSection {
 }
 
 const filterSections = computed<FilterSection[]>(() => {
-  const support: FilterSection = {
-    key: 'supportLanguages',
-    label: '支持语言',
-    options: supportOptions.value,
-  }
   if (isIntern.value) {
     return [
       { key: 'durations', label: '开发周期', options: durationOptions.value },
       { key: 'techFields', label: '技术领域', options: techOptions.value },
       { key: 'programmingLanguages', label: '编程语言', options: languageOptions.value },
-      support,
     ]
   }
   if (isTa.value) {
@@ -95,13 +94,10 @@ const filterSections = computed<FilterSection[]>(() => {
       { key: 'scheduleTypes', label: '学期', options: taScheduleOptions.value },
       { key: 'weeklyHours', label: '每周投入', options: weeklyOptions.value },
       { key: 'educationLevels', label: '在读身份', options: educationOptions.value },
-      support,
     ]
   }
   return [
-    { key: 'scheduleTypes', label: '科研周期', options: raScheduleOptions.value },
     { key: 'techFields', label: '研究方向', options: techOptions.value },
-    support,
   ]
 })
 
@@ -118,9 +114,6 @@ function matchesAnyRange(value: number, ranges: string[]) {
 const tasks = computed(() => {
   const keyword = filters.keyword.trim().toLowerCase()
   return sourceTasks.value.filter((task) => {
-    if (filters.supportLanguages.length && !filters.supportLanguages.includes(task.supportLanguages)) {
-      return false
-    }
     if (isIntern.value) {
       if (filters.techFields.length && !filters.techFields.includes(task.techField)) return false
       if (filters.durations.length && !matchesAnyRange(task.durationWeeks, filters.durations)) return false
@@ -160,8 +153,6 @@ const tasks = computed(() => {
   })
 })
 
-const resultCount = computed(() => tasks.value.length)
-
 const selectedChips = computed<SelectedChip[]>(() => {
   const chips: SelectedChip[] = []
   const pushMany = (key: FilterKey, values: string[], options: { label: string; value: string }[], group: string) => {
@@ -179,10 +170,8 @@ const selectedChips = computed<SelectedChip[]>(() => {
     pushMany('weeklyHours', filters.weeklyHours, weeklyOptions.value, '每周投入')
     pushMany('educationLevels', filters.educationLevels, educationOptions.value, '在读身份')
   } else {
-    pushMany('scheduleTypes', filters.scheduleTypes, raScheduleOptions.value, '科研周期')
     pushMany('techFields', filters.techFields, techOptions.value, '研究方向')
   }
-  pushMany('supportLanguages', filters.supportLanguages, supportOptions.value, '支持语言')
   if (filters.keyword.trim()) {
     chips.push({
       key: 'keyword',
@@ -196,6 +185,13 @@ const selectedChips = computed<SelectedChip[]>(() => {
 
 const selectedFilterCount = computed(
   () => selectedChips.value.filter((chip) => chip.key !== 'keyword').length,
+)
+
+/** 无本地筛选时展示服务端总数；有筛选时展示当前已加载中的匹配数 */
+const resultCount = computed(() =>
+  selectedFilterCount.value > 0 || filters.keyword.trim()
+    ? tasks.value.length
+    : totalCount.value,
 )
 
 function isSelected(key: FilterKey, value: string) {
@@ -237,22 +233,76 @@ function seatLabel(task: Task) {
   return `${task.filled}/${task.quota}`
 }
 
-async function loadModuleList() {
-  loading.value = true
+async function fetchPage(nextPage: number, append: boolean) {
+  if (append) {
+    if (loadingMore.value || loading.value || !hasMore.value) return
+    loadingMore.value = true
+  } else {
+    loading.value = true
+    loadError.value = false
+  }
   try {
-    const list = await api<Task[]>(`/api/v1/tasks?roleType=${activeModule.value}`)
-    sourceTasks.value = list
+    const data = await api<TaskPage>(
+      `/api/v1/tasks?roleType=${activeModule.value}&page=${nextPage}&size=${PAGE_SIZE}`,
+    )
+    sourceTasks.value = append
+      ? [...sourceTasks.value, ...data.items.filter((item) => !sourceTasks.value.some((row) => row.id === item.id))]
+      : data.items
+    page.value = data.page
+    hasMore.value = data.hasMore
+    totalCount.value = data.total
   } catch (cause) {
     Message.error(cause instanceof Error ? cause.message : '加载失败')
-    sourceTasks.value = []
+    if (!append) {
+      sourceTasks.value = []
+      totalCount.value = 0
+      hasMore.value = false
+      loadError.value = true
+    }
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
+}
+
+async function loadModuleList() {
+  page.value = 0
+  hasMore.value = true
+  await fetchPage(0, false)
+  await nextTick()
+  observeLoadMore()
+}
+
+async function loadMore() {
+  if (!isMobile.value || !hasMore.value || loading.value || loadingMore.value) return
+  await fetchPage(page.value + 1, true)
+}
+
+async function onPcPageChange(current: number) {
+  if (isMobile.value) return
+  await fetchPage(Math.max(current - 1, 0), false)
+  const anchor = document.getElementById('opportunities')
+  if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  else window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function observeLoadMore() {
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
+  if (!isMobile.value) return
+  const el = loadMoreSentinel.value
+  if (!el) return
+  loadMoreObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore()
+    },
+    { root: null, rootMargin: '240px 0px', threshold: 0 },
+  )
+  loadMoreObserver.observe(el)
 }
 
 function resetFilters() {
   filters.techFields = []
-  filters.supportLanguages = []
   filters.programmingLanguages = []
   filters.durations = []
   filters.scheduleTypes = []
@@ -317,6 +367,11 @@ onMounted(async () => {
   await Promise.all([loadDicts(), loadSiteConfig()])
   await loadModuleList()
 })
+
+onUnmounted(() => {
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
+})
 </script>
 
 <template>
@@ -351,7 +406,7 @@ onMounted(async () => {
             <div class="hero-card-icon ra">◆</div>
             <div>
               <h3>科研 · RA</h3>
-              <p>课题研究与实验协作</p>
+              <p>揭榜开放方向，方案竞标</p>
             </div>
           </article>
         </div>
@@ -368,12 +423,6 @@ onMounted(async () => {
         <span class="tutorial-link">查看文档 ↗</span>
       </a>
     </div>
-    <div v-if="!isMobile" class="path-strip">
-      <span><b>01</b> 筛选感兴趣的项目</span>
-      <span><b>02</b> 沟通并提交申请</span>
-      <span><b>03</b> 入项协作并完成</span>
-    </div>
-
     <header v-if="!isMobile" id="opportunities" class="page-head">
       <div>
         <a-typography-title :heading="4" style="margin: 0">任务广场</a-typography-title>
@@ -557,10 +606,9 @@ onMounted(async () => {
               <th>发布方</th>
               <th v-if="isIntern">开发周期</th>
               <th v-else-if="isTa">学期</th>
-              <th v-else>科研周期</th>
+              <th v-else-if="isRa">截止</th>
               <th v-if="isTa">每周投入</th>
               <th v-else-if="isRa">方向</th>
-              <th>支持语言</th>
               <th>名额</th>
             </tr>
           </thead>
@@ -587,14 +635,36 @@ onMounted(async () => {
                 </button>
               </td>
               <td v-if="isIntern">{{ durationLabel(task.durationWeeks) }}</td>
-              <td v-else>{{ scheduleLabel(task) }}</td>
+              <td v-else-if="isTa">{{ scheduleLabel(task) }}</td>
+              <td v-else-if="isRa">
+                {{ task.bidDeadline ? task.bidDeadline.replace('T', ' ').slice(0, 16) : '长期' }}
+              </td>
               <td v-if="isTa">{{ task.estimatedHours }} 小时/周</td>
               <td v-else-if="isRa">{{ task.techField }}</td>
-              <td>{{ task.supportLanguages }}</td>
               <td>{{ seatLabel(task) }}</td>
             </tr>
           </tbody>
         </table>
+      </div>
+      <div
+        v-if="isMobile && (tasks.length || hasMore)"
+        ref="loadMoreSentinel"
+        class="load-more-sentinel"
+        aria-hidden="true"
+      />
+      <div v-if="isMobile && loadingMore" class="load-more-status">加载更多…</div>
+      <div v-else-if="isMobile && tasks.length && !hasMore" class="load-more-status muted">已经到底了</div>
+      <div v-else-if="loadError && !tasks.length" class="load-more-status">
+        <a-button type="text" @click="loadModuleList">重新加载</a-button>
+      </div>
+      <div v-if="showPcPager" class="pager">
+        <a-pagination
+          :total="totalCount"
+          :current="page + 1"
+          :page-size="PAGE_SIZE"
+          show-total
+          @change="onPcPageChange"
+        />
       </div>
     </a-spin>
   </section>
@@ -607,7 +677,20 @@ onMounted(async () => {
   --ink: #111827;
   --muted: #6b7280;
 }
-.page-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 14px; }
+.page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  margin: 28px 0 14px;
+  scroll-margin-top: 24px;
+}
+.page-head .subtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
 .module-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -760,20 +843,6 @@ onMounted(async () => {
   font-size: 11px;
   color: #6b7280;
 }
-.path-strip {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 8px 16px;
-  color: #6b7280;
-  font-size: 13px;
-}
-.path-strip b {
-  font-size: 12px;
-  font-weight: 800;
-  color: #2563eb;
-  margin-right: 10px;
-}
 .tutorial-banner {
   display: flex;
   align-items: center;
@@ -925,6 +994,24 @@ onMounted(async () => {
   width: 100%;
   min-height: 120px;
 }
+.load-more-sentinel {
+  width: 100%;
+  height: 1px;
+}
+.load-more-status {
+  text-align: center;
+  padding: 14px 8px 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+.load-more-status.muted {
+  color: #94a3b8;
+}
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 0 4px;
+}
 
 .table-wrap {
   overflow-x: auto;
@@ -1028,8 +1115,6 @@ onMounted(async () => {
   .hero { padding: 16px; }
   .hero-cards { display: none; }
   .tutorial-text { white-space: normal; }
-  .path-strip { flex-wrap: wrap; gap: 12px; }
-  .page-head { align-items: start; flex-direction: column; }
 }
 .module-tabs.compact {
   grid-template-columns: repeat(3, minmax(0, 1fr));

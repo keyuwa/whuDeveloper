@@ -76,7 +76,8 @@ export const router = createRouter({
     { path: '/admin/users', component: AdminUsersView, meta: { role: 'ADMIN' } },
     { path: '/admin/tasks', component: AdminTasksView, meta: { role: 'ADMIN' } },
     { path: '/admin/reminders', component: AdminRemindersView, meta: { role: 'ADMIN' } },
-    { path: '/admin/settings', component: AdminSettingsView, meta: { role: 'ADMIN' } },
+    { path: '/admin/settings', redirect: '/admin/settings/ark', meta: { role: 'ADMIN' } },
+    { path: '/admin/settings/:section', component: AdminSettingsView, meta: { role: 'ADMIN' } },
     { path: '/admin/dicts', component: AdminDictsView, meta: { role: 'ADMIN' } },
   ],
 })

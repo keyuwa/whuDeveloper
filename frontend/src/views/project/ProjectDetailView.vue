@@ -146,10 +146,6 @@ watch(
                 <a v-if="task.repoUrl" :href="task.repoUrl" target="_blank" rel="noopener" class="repo-link">{{ task.repoUrl }}</a>
                 <span v-else class="muted">未提供</span>
               </div>
-              <div class="meta-row">
-                <span class="meta-label">支持语言</span>
-                <span>{{ task.supportLanguages }}</span>
-              </div>
             </div>
           </a-card>
         </aside>

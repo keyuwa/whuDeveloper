@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
@@ -8,6 +8,15 @@ import { useIsMobile } from '../composables/useDevice'
 import { renderMarkdown } from '../markdown'
 import type { Application } from '../types'
 
+type AiDetail = {
+  completeness?: number
+  fit?: number
+  feasibility?: number
+  evidence?: number
+  feasibilityLabel?: string
+  risks?: string
+}
+
 const route = useRoute()
 const router = useRouter()
 const isMobile = useIsMobile()
@@ -15,6 +24,7 @@ const items = ref<Application[]>([])
 const notes = ref<Record<number, string>>({})
 const loading = ref(false)
 const tab = ref<'pending' | 'all'>('pending')
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const statusLabel: Record<string, string> = {
   SUBMITTED: '待审阅',
@@ -22,6 +32,39 @@ const statusLabel: Record<string, string> = {
   ACCEPTED: '已通过',
   REJECTED: '未通过',
   WITHDRAWN: '已撤回',
+}
+
+function isChallenge(item: Application) {
+  return item.postingMode === 'CHALLENGE' || item.taskRoleType === 'RA'
+}
+
+function parseAiDetail(item: Application): AiDetail | null {
+  if (!item.aiDetailJson) return null
+  try {
+    return JSON.parse(item.aiDetailJson) as AiDetail
+  } catch {
+    return null
+  }
+}
+
+function aiLabel(item: Application) {
+  if (!isChallenge(item)) return ''
+  if (item.aiStatus === 'DONE' && item.aiScore != null) return `AI ${item.aiScore}`
+  if (item.aiStatus === 'PENDING') return 'AI 评分中'
+  if (item.aiStatus === 'FAILED') return 'AI 暂不可用'
+  if (item.aiStatus === 'SKIPPED') return 'AI 未评分'
+  return ''
+}
+
+function canRescoreAi(item: Application) {
+  return isChallenge(item) && (item.aiStatus === 'SKIPPED' || item.aiStatus === 'FAILED' || item.aiStatus === 'DONE')
+}
+
+function feasibilityTagColor(label?: string) {
+  if (label === '初步可行') return 'green'
+  if (label === '条件可行') return 'orange'
+  if (label === '可行性存疑') return 'red'
+  return 'purple'
 }
 
 const statusColor: Record<string, string> = {
@@ -58,12 +101,35 @@ const pendingCount = computed(() =>
   }).length,
 )
 
+function stopPoll() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+function syncPoll() {
+  const pending = items.value.some((item) => item.aiStatus === 'PENDING')
+  if (pending && !pollTimer) {
+    pollTimer = setInterval(() => {
+      load().catch(() => undefined)
+    }, 4000)
+  } else if (!pending) {
+    stopPoll()
+  }
+}
+
 async function load() {
   items.value = await api<Application[]>('/api/v1/publisher/applications')
+  syncPoll()
 }
 
 onMounted(() => {
   load().catch((cause) => Message.error(cause instanceof Error ? cause.message : '加载失败'))
+})
+
+onUnmounted(() => {
+  stopPoll()
 })
 
 watch(taskIdFilter, (id) => {
@@ -73,14 +139,45 @@ watch(taskIdFilter, (id) => {
 async function review(id: number, decision: 'ACCEPT' | 'REJECT') {
   loading.value = true
   try {
+    const challenge = items.value.some((item) => item.id === id && isChallenge(item))
     await api(`/api/v1/applications/${id}/review`, {
       method: 'POST',
       body: JSON.stringify({ decision, note: notes.value[id] || '' }),
     })
     await load()
-    Message.success(decision === 'ACCEPT' ? '已通过，学生已入项' : '已拒绝')
+    if (decision === 'ACCEPT') Message.success('已通过，学生已入项')
+    else Message.success(challenge ? '已标记不采纳' : '已拒绝')
   } catch (cause) {
     Message.error(cause instanceof Error ? cause.message : '操作失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function award(id: number) {
+  loading.value = true
+  try {
+    await api(`/api/v1/applications/${id}/award`, {
+      method: 'POST',
+      body: JSON.stringify({ note: notes.value[id] || '' }),
+    })
+    await load()
+    Message.success('已通过；名额未满时可继续通过其他方案')
+  } catch (cause) {
+    Message.error(cause instanceof Error ? cause.message : '操作失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function rescoreAi(id: number) {
+  loading.value = true
+  try {
+    await api(`/api/v1/applications/${id}/ai-rescore`, { method: 'POST' })
+    await load()
+    Message.success('已重新发起 AI 初判')
+  } catch (cause) {
+    Message.error(cause instanceof Error ? cause.message : '重评失败')
   } finally {
     loading.value = false
   }
@@ -126,8 +223,36 @@ function clearTaskFilter() {
           </a-tag>
         </div>
         <a-typography-paragraph type="secondary">
-          {{ item.taskTitle }} · 催办 {{ item.remindCount }} 次
+          {{ item.taskTitle }}
+          <template v-if="isChallenge(item)"> · 科研方案</template>
         </a-typography-paragraph>
+        <div v-if="aiLabel(item)" class="ai-box">
+          <div class="resume-title">
+            AI 可行性初判
+            <a-tag size="small" color="purple" style="margin-left: 8px">{{ aiLabel(item) }}</a-tag>
+            <a-tag
+              v-if="parseAiDetail(item)?.feasibilityLabel"
+              size="small"
+              :color="feasibilityTagColor(parseAiDetail(item)?.feasibilityLabel)"
+              style="margin-left: 6px"
+            >
+              {{ parseAiDetail(item)?.feasibilityLabel }}
+            </a-tag>
+          </div>
+          <p v-if="item.aiSummary">{{ item.aiSummary }}</p>
+          <div v-if="parseAiDetail(item) && item.aiStatus === 'DONE'" class="ai-dims">
+            <span>完整 {{ parseAiDetail(item)?.completeness ?? '—' }}</span>
+            <span>匹配 {{ parseAiDetail(item)?.fit ?? '—' }}</span>
+            <span>可行 {{ parseAiDetail(item)?.feasibility ?? '—' }}</span>
+            <span>依据 {{ parseAiDetail(item)?.evidence ?? '—' }}</span>
+          </div>
+          <p v-if="parseAiDetail(item)?.risks" class="ai-risk">风险：{{ parseAiDetail(item)?.risks }}</p>
+          <p v-if="item.aiStatus === 'SKIPPED' && item.aiSummary" class="ai-risk">{{ item.aiSummary }}</p>
+          <p class="ai-hint">仅供参考，揭榜仍由你人工决定。</p>
+          <div v-if="canRescoreAi(item)" style="margin-top: 8px">
+            <a-button size="mini" :loading="loading" @click="rescoreAi(item.id)">重新 AI 初判</a-button>
+          </div>
+        </div>
         <div v-if="item.school || item.college || item.major || item.bio" class="resume-box">
           <div class="resume-title">学生简历</div>
           <p v-if="item.school || item.college || item.major">
@@ -138,14 +263,16 @@ function clearTaskFilter() {
             {{ item.resumeFileName || '查看简历 PDF' }}
           </a>
         </div>
-        <div class="resume-title" style="margin-top: 12px">申请内容</div>
+        <div class="resume-title" style="margin-top: 12px">{{ isChallenge(item) ? '方案内容' : '申请内容' }}</div>
         <article v-if="item.proposalMd" class="md-body proposal-view" v-html="renderMarkdown(item.proposalMd)" />
         <ProposalFile v-if="item.proposalFileName" :application-id="item.id" :file-name="item.proposalFileName" />
         <template v-if="item.status === 'SUBMITTED'">
           <a-input v-model="notes[item.id]" placeholder="评语（可选）" style="margin: 12px 0" />
           <div class="action-row">
             <a-space wrap>
-              <a-button status="danger" :loading="loading" @click="review(item.id, 'REJECT')">拒绝</a-button>
+              <a-button status="danger" :loading="loading" @click="review(item.id, 'REJECT')">
+                {{ isChallenge(item) ? '不采纳' : '拒绝' }}
+              </a-button>
               <a-button
                 type="text"
                 @click="router.push({ path: '/messages', query: { taskId: String(item.taskId), studentId: String(item.studentId) } })"
@@ -153,7 +280,22 @@ function clearTaskFilter() {
                 打开对话
               </a-button>
             </a-space>
-            <a-button type="primary" :loading="loading" @click="review(item.id, 'ACCEPT')">通过并接收</a-button>
+            <a-button
+              v-if="isChallenge(item)"
+              type="primary"
+              :loading="loading"
+              @click="award(item.id)"
+            >
+              通过
+            </a-button>
+            <a-button
+              v-else
+              type="primary"
+              :loading="loading"
+              @click="review(item.id, 'ACCEPT')"
+            >
+              通过
+            </a-button>
           </div>
         </template>
         <div v-else-if="item.status === 'ACCEPTED'" class="accepted-box">
@@ -182,6 +324,36 @@ function clearTaskFilter() {
   font-size: 13px;
   line-height: 1.7;
   color: #4c596c;
+}
+.ai-box {
+  margin: 10px 0 6px;
+  padding: 12px 14px;
+  background: #f5f3ff;
+  border: 1px dashed #c4b5fd;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #4c1d95;
+}
+.ai-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #7c3aed;
+  opacity: 0.85;
+}
+.ai-dims {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5b21b6;
+}
+.ai-risk {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #6d28d9;
 }
 .resume-title {
   font-size: 13px;

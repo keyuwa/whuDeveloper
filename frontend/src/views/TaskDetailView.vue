@@ -7,7 +7,15 @@ import { auth, setSession } from '../auth'
 import { useIsMobile } from '../composables/useDevice'
 import { loadDicts, scheduleLabelMap } from '../composables/useDicts'
 import { renderMarkdown } from '../markdown'
-import { PROPOSAL_TEMPLATE, TASK_ROLE_LABEL, type Application, type Task, type User } from '../types'
+import {
+  CHALLENGE_PROPOSAL_TEMPLATE,
+  CHALLENGE_STATUS_LABEL,
+  PROPOSAL_TEMPLATE,
+  TASK_ROLE_LABEL,
+  type Application,
+  type Task,
+  type User,
+} from '../types'
 
 const scheduleLabels = scheduleLabelMap()
 import ProposalFile from '../components/ProposalFile.vue'
@@ -20,11 +28,25 @@ const task = ref<Task | null>(null)
 const proposalText = ref('')
 const proposalFile = ref<File | null>(null)
 const myApplication = ref<Application | null>(null)
-const applicationLabels: Record<string, string> = { SUBMITTED: '待审阅', ACCEPTED: '已通过', REJECTED: '未通过' }
-const proposalGuideHtml = computed(() => renderMarkdown(PROPOSAL_TEMPLATE))
+const applicationLabels: Record<string, string> = {
+  SUBMITTED: '待审阅',
+  ACCEPTED: '已通过',
+  REJECTED: '未通过',
+}
+const isChallenge = computed(() => task.value?.postingMode === 'CHALLENGE' || task.value?.roleType === 'RA')
+const challengeOpen = computed(() => {
+  if (!task.value || !isChallenge.value) return task.value?.status === 'OPEN'
+  if (task.value.status !== 'OPEN') return false
+  if (task.value.challengeStatus && task.value.challengeStatus !== 'OPEN') return false
+  if (task.value.bidDeadline && new Date(task.value.bidDeadline).getTime() < Date.now()) return false
+  return true
+})
+const proposalGuideHtml = computed(() =>
+  renderMarkdown(isChallenge.value ? CHALLENGE_PROPOSAL_TEMPLATE : PROPOSAL_TEMPLATE),
+)
 const myProposalHtml = computed(() => renderMarkdown(myApplication.value?.proposalMd || ''))
 const canSubmitApplication = computed(
-  () => Boolean(proposalText.value.trim() || proposalFile.value) && task.value?.status === 'OPEN',
+  () => Boolean(proposalText.value.trim() || proposalFile.value) && challengeOpen.value,
 )
 function selectProposal(event: Event) {
   const input = event.target as HTMLInputElement
@@ -89,7 +111,10 @@ async function apply() {
     return router.push('/me/resume')
   }
   const text = proposalText.value.trim()
-  if (!text && !proposalFile.value) return Message.error('请填写申请内容，或上传 PDF 附件')
+  if (!challengeOpen.value) return Message.error(isChallenge.value ? '揭榜已截止或已结束' : '项目未开放申请')
+  if (!text && !proposalFile.value) {
+    return Message.error(isChallenge.value ? '请填写方案内容，或上传 PDF 附件' : '请填写申请内容，或上传 PDF 附件')
+  }
   if (text.length > 10000) return Message.error('申请文字不超过 10000 字')
   loading.value = true
   try {
@@ -100,7 +125,7 @@ async function apply() {
       method: 'POST',
       body,
     })
-    Message.success('申请已提交')
+    Message.success(isChallenge.value ? '方案已提交' : '申请已提交')
     proposalText.value = ''
     proposalFile.value = null
     await load()
@@ -155,8 +180,14 @@ async function startChat() {
         <a-tag size="large" class="mono">{{ task.publicCode }}</a-tag>
         <a-tag color="arcoblue" size="large">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
         <a-tag v-if="task.roleType === 'INTERN'" color="orangered" size="large">{{ task.difficulty }}</a-tag>
-        <a-tag color="green" size="large">{{ task.supportLanguages }} · 支持语言</a-tag>
+        <a-tag v-if="isChallenge && task.challengeStatus" color="purple" size="large">
+          {{ CHALLENGE_STATUS_LABEL[task.challengeStatus] || task.challengeStatus }}
+        </a-tag>
         <a-tag size="large">名额 {{ task.filled }}/{{ task.quota }}</a-tag>
+        <a-tag v-if="isChallenge" size="large">
+          {{ task.bidDeadline ? `截止 ${task.bidDeadline.replace('T', ' ').slice(0, 16)}` : '长期开放' }}
+        </a-tag>
+        <a-tag v-if="isChallenge" size="large">待审方案 {{ task.pendingApplications || 0 }}</a-tag>
       </a-space>
       <div v-if="isStudent && !isMobile" class="hero-actions">
         <a-button type="primary" :loading="loading" @click="startChat">立即沟通</a-button>
@@ -168,7 +199,9 @@ async function startChat() {
         >
           {{ task.shortlisted ? '取消备选' : '加入备选' }}
         </a-button>
-        <a href="#apply" class="apply-jump">{{ task.myApplicationId ? '查看我的申请 ↓' : '准备申请书 ↓' }}</a>
+        <a href="#apply" class="apply-jump">
+          {{ task.myApplicationId ? (isChallenge ? '查看我的方案 ↓' : '查看我的申请 ↓') : (isChallenge ? '提交科研方案 ↓' : '准备申请书 ↓') }}
+        </a>
       </div>
     </a-card>
 
@@ -189,11 +222,11 @@ async function startChat() {
           </div>
         </a-card>
 
-        <a-card title="项目产出要求">
+        <a-card :title="isChallenge ? '期望产出' : '项目产出要求'">
           <pre class="md">{{ task.outputRequirement }}</pre>
         </a-card>
 
-        <a-card title="能力要求">
+        <a-card :title="isChallenge ? '能力与约束' : '能力要求'">
           <pre class="md">{{ task.techRequirement }}</pre>
         </a-card>
 
@@ -211,7 +244,7 @@ async function startChat() {
           </div>
           <pre v-if="task.techDocMd" class="md">{{ task.techDocMd }}</pre>
         </a-card>
-        <a-card v-if="isStudent" id="apply" class="application-panel" title="项目申请">
+        <a-card v-if="isStudent" id="apply" class="application-panel" :title="isChallenge ? '科研方案（揭榜）' : '项目申请'">
           <template v-if="!task.myApplicationId">
             <a-alert
               v-if="!resumeReady"
@@ -222,7 +255,11 @@ async function startChat() {
               姓名、学校、学院、专业、在读身份与个人简介填写完整后方可申请。
               <a-button type="text" @click="router.push('/me/resume')">去完善简历</a-button>
             </a-alert>
-            <p class="application-intro">可直接填写文字申请，也可另附 PDF；至少提供其中一种。支持 Markdown。</p>
+            <p class="application-intro">
+              {{ isChallenge
+                ? '本科研任务采用揭榜：提交研究方案（文字或 PDF 至少一种）。多人可并行竞标，发布方比选后揭榜入项。'
+                : '可直接填写文字申请，也可另附 PDF；至少提供其中一种。支持 Markdown。' }}
+            </p>
             <div class="application-guide">
               <strong>结构提示（填写时可参考，不会自动写入正文）</strong>
               <article class="md-body proposal-guide" v-html="proposalGuideHtml" />
@@ -230,26 +267,34 @@ async function startChat() {
             <a-textarea
               v-model="proposalText"
               :auto-size="{ minRows: 8, maxRows: 18 }"
-              :disabled="loading || task.status !== 'OPEN' || !resumeReady"
-              placeholder="在此填写申请内容…"
+              :disabled="loading || !challengeOpen || !resumeReady"
+              :placeholder="isChallenge ? '在此填写科研方案…' : '在此填写申请内容…'"
               style="margin-bottom: 12px"
             />
             <label class="upload-area">
               <strong>{{ proposalFile ? proposalFile.name : '可选：上传 PDF 附件' }}</strong>
               <span>PDF 格式，最大 5 MB · 可不传</span>
-              <input type="file" accept=".pdf,application/pdf" :disabled="loading || task.status !== 'OPEN' || !resumeReady" @change="selectProposal" />
+              <input type="file" accept=".pdf,application/pdf" :disabled="loading || !challengeOpen || !resumeReady" @change="selectProposal" />
             </label>
             <div v-if="proposalFile" class="application-actions" style="margin-top: 8px">
               <button type="button" class="linkish" @click="clearProposalFile">移除附件</button>
             </div>
             <div class="application-actions">
-              <span>每个项目仅可申请一次，请核对后提交。</span>
-              <a-button type="primary" :loading="loading" :disabled="!canSubmitApplication || !resumeReady" @click="apply">{{ task.status === 'OPEN' ? '提交申请' : '项目已关闭申请' }}</a-button>
+              <span>{{ isChallenge ? '每个科研任务仅可提交一次方案。' : '每个项目仅可申请一次，请核对后提交。' }}</span>
+              <a-button type="primary" :loading="loading" :disabled="!canSubmitApplication || !resumeReady" @click="apply">
+                {{ challengeOpen ? (isChallenge ? '提交方案' : '提交申请') : (isChallenge ? '揭榜已截止' : '项目已关闭申请') }}
+              </a-button>
             </div>
           </template>
           <template v-else>
             <div class="application-actions"><a-tag color="arcoblue">{{ applicationLabels[task.myApplicationStatus || ''] || task.myApplicationStatus }}</a-tag><a-button v-if="task.projectId" type="primary" @click="router.push(`/me/projects/${task.projectId}/progress`)">进入工作台</a-button></div>
-            <p class="application-intro">{{ task.myApplicationStatus === 'SUBMITTED' ? '申请已提交，请等待发布方审阅。' : task.myApplicationStatus === 'ACCEPTED' ? '申请已通过，可在工作台查看申请并提交周报。' : '本次申请未通过，可查看反馈并探索其他项目。' }}</p>
+            <p class="application-intro">
+              {{ task.myApplicationStatus === 'SUBMITTED'
+                ? (isChallenge ? '方案已提交，请等待发布方比选揭榜。' : '申请已提交，请等待发布方审阅。')
+                : task.myApplicationStatus === 'ACCEPTED'
+                  ? (isChallenge ? '已中选入项，可在工作台推进协作。' : '申请已通过，可在工作台查看申请并提交周报。')
+                  : (isChallenge ? '本次未中选，可查看反馈并探索其他科研任务。' : '本次申请未通过，可查看反馈并探索其他项目。') }}
+            </p>
             <article v-if="myApplication?.proposalMd" class="md-body proposal-view" v-html="myProposalHtml" />
             <ProposalFile v-if="myApplication?.proposalFileName" :application-id="myApplication.id" :file-name="myApplication.proposalFileName" />
             <p v-if="myApplication?.reviewNote" class="application-intro">审阅意见：{{ myApplication.reviewNote }}</p>
@@ -306,11 +351,15 @@ async function startChat() {
               <span class="meta-label">仓库</span>
               <a :href="task.repoUrl" target="_blank" rel="noopener">{{ task.repoUrl }}</a>
             </div>
-            <div class="meta-row">
+            <div v-if="isChallenge" class="meta-row">
+              <span class="meta-label">揭榜截止</span>
+              <span>{{ task.bidDeadline ? task.bidDeadline.replace('T', ' ').slice(0, 16) : '长期开放' }}</span>
+            </div>
+            <div v-if="!isChallenge" class="meta-row">
               <span class="meta-label">{{ task.roleType === 'INTERN' ? '开发周期' : '周期' }}</span>
               <span>{{ task.durationWeeks }} 周</span>
             </div>
-            <div class="meta-row">
+            <div v-if="!isChallenge" class="meta-row">
               <span class="meta-label">预估工时</span>
               <span>每周约 {{ task.estimatedHours }} 小时</span>
             </div>
@@ -342,7 +391,7 @@ async function startChat() {
         :disabled="Boolean(task.myApplicationId) || task.status !== 'OPEN'"
         @click="router.push({ hash: '#apply' })"
       >
-        {{ task.myApplicationId ? '已申请' : '立即申请' }}
+        {{ task.myApplicationId ? (isChallenge ? '已交方案' : '已申请') : (isChallenge ? '提交方案' : '立即申请') }}
       </a-button>
     </div>
   </section>

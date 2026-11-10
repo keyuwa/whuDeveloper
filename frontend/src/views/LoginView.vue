@@ -50,9 +50,12 @@ function fill(account: 'student' | 'publisher' | 'admin') {
       <template #extra>
         <a-typography-text type="secondary">开源项目协作平台</a-typography-text>
       </template>
+      <a-alert type="info" style="margin-bottom: 16px" :show-icon="true">
+        支持普通邮箱登录。建议优先使用学校邮箱注册，身份更可信。
+      </a-alert>
       <a-form :model="form" layout="vertical" @submit-success="submit">
         <a-form-item field="email" label="邮箱" :rules="[{ required: true, message: '请填写邮箱' }]">
-          <a-input v-model="form.email" allow-clear placeholder="name@stu.edu.cn" />
+          <a-input v-model="form.email" allow-clear placeholder="name@example.com" />
         </a-form-item>
         <a-form-item field="password" label="密码" :rules="[{ required: true, message: '请填写密码' }]">
           <a-input-password v-model="form.password" allow-clear placeholder="密码" />

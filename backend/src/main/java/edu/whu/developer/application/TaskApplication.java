@@ -62,6 +62,23 @@ public class TaskApplication {
     @Column(name = "remind_count", nullable = false)
     private int remindCount;
 
+    /** AI 辅助评分 0–100；可空 */
+    @Column(name = "ai_score")
+    private Integer aiScore;
+
+    @Column(name = "ai_summary", length = 500)
+    private String aiSummary;
+
+    @Column(name = "ai_detail_json", columnDefinition = "text")
+    private String aiDetailJson;
+
+    /** PENDING | DONE | SKIPPED | FAILED */
+    @Column(name = "ai_status", nullable = false, length = 16)
+    private String aiStatus = "SKIPPED";
+
+    @Column(name = "ai_scored_at")
+    private LocalDateTime aiScoredAt;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -77,6 +94,9 @@ public class TaskApplication {
         updatedAt = now;
         if (status == null) {
             status = "SUBMITTED";
+        }
+        if (aiStatus == null) {
+            aiStatus = "SKIPPED";
         }
     }
 

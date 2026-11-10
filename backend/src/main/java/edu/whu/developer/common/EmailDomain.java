@@ -19,6 +19,11 @@ public final class EmailDomain {
         return domain(email).endsWith(".whu.edu.cn");
     }
 
+    /** 是否校园邮箱（学生 .edu.cn / 发布方 .whu.edu.cn），用于前端提示，不强制。 */
+    public static boolean isCampusRecommended(String email, boolean publisher) {
+        return publisher ? isPublisher(email) : isStudent(email);
+    }
+
     private static String domain(String email) {
         String normalized = normalize(email);
         int at = normalized.lastIndexOf('@');

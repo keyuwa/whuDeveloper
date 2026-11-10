@@ -1,5 +1,7 @@
 package edu.whu.developer.task;
 
+import edu.whu.developer.task.TaskDtos.PublisherTaskPage;
+import edu.whu.developer.task.TaskDtos.TaskPage;
 import edu.whu.developer.task.TaskDtos.TaskRequest;
 import edu.whu.developer.task.TaskDtos.TaskResponse;
 import jakarta.validation.Valid;
@@ -15,8 +17,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/v1")
 public class TaskController {
@@ -28,7 +28,7 @@ public class TaskController {
     }
 
     @GetMapping("/tasks")
-    public List<TaskResponse> list(
+    public TaskPage list(
             @RequestParam(required = false) String roleType,
             @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) String techField,
@@ -38,7 +38,9 @@ public class TaskController {
             @RequestParam(required = false) Integer durationMin,
             @RequestParam(required = false) Integer durationMax,
             @RequestParam(required = false) Integer hoursMin,
-            @RequestParam(required = false) Integer hoursMax
+            @RequestParam(required = false) Integer hoursMax,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
         return tasks.listOpen(
                 roleType,
@@ -50,7 +52,9 @@ public class TaskController {
                 durationMin,
                 durationMax,
                 hoursMin,
-                hoursMax);
+                hoursMax,
+                page,
+                size);
     }
 
     @GetMapping("/tasks/{id}")
@@ -59,8 +63,13 @@ public class TaskController {
     }
 
     @GetMapping("/publisher/tasks")
-    public List<TaskResponse> mine() {
-        return tasks.mine();
+    public PublisherTaskPage mine(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String roleType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return tasks.mine(status, roleType, page, size);
     }
 
     @PostMapping("/publisher/tasks")
@@ -69,8 +78,11 @@ public class TaskController {
     }
 
     @PutMapping("/publisher/tasks/{id}")
-    public TaskResponse update(@PathVariable Long id, @Valid @RequestBody TaskRequest request) {
-        return tasks.update(id, request);
+    public TaskResponse update(
+            @PathVariable Long id,
+            @Valid @RequestBody TaskRequest request,
+            @RequestParam(required = false) Boolean publish) {
+        return tasks.update(id, request, publish);
     }
 
     @PostMapping("/publisher/tasks/{id}/publish")
