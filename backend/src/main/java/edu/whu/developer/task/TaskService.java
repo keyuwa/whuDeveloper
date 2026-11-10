@@ -43,6 +43,10 @@ public class TaskService {
     public static final Set<String> TECH_FIELDS = Set.of(
             "前端开发", "后端开发", "全栈应用", "人工智能", "系统与底层", "开发工具", "数据与存储"
     );
+    public static final Set<String> RESEARCH_DIRECTIONS = Set.of(
+            "人工智能", "机器学习与数据挖掘", "计算机视觉", "自然语言处理", "网络安全",
+            "系统与网络", "软件工程", "人机交互", "边缘计算与物联网", "科学计算"
+    );
     public static final Set<String> LEVELS = Set.of("L1", "L2", "L3", "L4", "L5");
     public static final Set<String> SUPPORT_LANGUAGES = Set.of("中文", "English", "中英双语");
 
@@ -326,6 +330,7 @@ public class TaskService {
         // 一期不采集支持语言，库字段保留默认值
         String support = "中文";
         Set<String> techFields = dictValues("TECH_FIELD", TECH_FIELDS);
+        Set<String> researchDirections = dictValues("RESEARCH_DIRECTION", RESEARCH_DIRECTIONS);
         Set<String> difficulties = dictValues("DIFFICULTY", LEVELS);
         Set<String> taSchedules = dictValues("TA_SCHEDULE", TA_SCHEDULE_TYPES);
         Set<String> identities = dictValues("STUDENT_IDENTITY", EDUCATION_LEVELS);
@@ -371,7 +376,7 @@ public class TaskService {
             durationWeeks = weeksForSchedule(scheduleType);
         } else {
             level = "L3";
-            if (!techFields.contains(field)) {
+            if (!researchDirections.contains(field)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "研究方向不合法");
             }
             if (languages.isBlank()) {

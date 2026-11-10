@@ -51,7 +51,6 @@ function initialStatusTab(): 'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED' {
 
 const roleTab = ref<'TA' | 'INTERN' | 'RA'>(initialRoleTab())
 const statusTab = ref<'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED'>(initialStatusTab())
-const statusCounts = ref({ ALL: 0, OPEN: 0, DRAFT: 0, CLOSED: 0 })
 const roleCounts = ref({ TA: 0, INTERN: 0, RA: 0 })
 const loadMoreSentinel = ref<HTMLElement | null>(null)
 let loadMoreObserver: IntersectionObserver | null = null
@@ -147,12 +146,6 @@ async function fetchPage(nextPage: number, append: boolean) {
   page.value = result.page
   total.value = result.total
   hasMore.value = result.hasMore
-  statusCounts.value = {
-    ALL: result.totalAll,
-    OPEN: result.totalOpen,
-    DRAFT: result.totalDraft,
-    CLOSED: result.totalClosed,
-  }
   roleCounts.value = {
     TA: result.totalTa,
     INTERN: result.totalIntern,
@@ -338,10 +331,10 @@ function openInbox(taskId?: number) {
       :size="isMobile ? 'medium' : 'large'"
       class="status-tabs"
     >
-      <a-tab-pane key="ALL" :title="`全部 · ${statusCounts.ALL}`" />
-      <a-tab-pane key="OPEN" :title="`已发布 · ${statusCounts.OPEN}`" />
-      <a-tab-pane key="DRAFT" :title="`草稿 · ${statusCounts.DRAFT}`" />
-      <a-tab-pane key="CLOSED" :title="`已下架 · ${statusCounts.CLOSED}`" />
+      <a-tab-pane key="ALL" title="全部" />
+      <a-tab-pane key="OPEN" title="已发布" />
+      <a-tab-pane key="DRAFT" title="草稿" />
+      <a-tab-pane key="CLOSED" title="已下架" />
     </a-tabs>
 
     <a-spin :loading="loading" style="width: 100%">
@@ -521,6 +514,20 @@ function openInbox(taskId?: number) {
 }
 .status-tabs {
   margin: 4px 0 14px;
+}
+.status-tabs :deep(.arco-tabs-nav-tab) {
+  flex: 1;
+  justify-content: space-between;
+}
+.status-tabs :deep(.arco-tabs-nav-tab-list) {
+  display: flex;
+  width: 100%;
+}
+.status-tabs :deep(.arco-tabs-tab) {
+  flex: 1;
+  justify-content: center;
+  margin: 0;
+  padding: 0 8px;
 }
 .task-card {
   border: 1px solid #eef2f7;

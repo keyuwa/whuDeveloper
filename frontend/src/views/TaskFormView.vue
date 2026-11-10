@@ -45,13 +45,24 @@ const bidLongTerm = ref(true)
 const isIntern = computed(() => form.roleType === 'INTERN')
 const isTa = computed(() => form.roleType === 'TA')
 const isRa = computed(() => form.roleType === 'RA')
-const techFieldOptions = dictOptions('TECH_FIELD')
+const techFieldDictOptions = dictOptions('TECH_FIELD')
+const researchDirectionOptions = dictOptions('RESEARCH_DIRECTION')
+const fieldOptions = computed(() => (isRa.value ? researchDirectionOptions.value : techFieldDictOptions.value))
 const difficultyOptions = dictOptions('DIFFICULTY')
 const educationOptions = dictItems('STUDENT_IDENTITY')
 const programmingLanguageOptions = dictOptions('PROGRAMMING_LANGUAGE')
 const taScheduleOptions = dictOptions('TA_SCHEDULE')
 const raScheduleOptions = dictOptions('RA_SCHEDULE')
 const scheduleOptions = computed(() => (isTa.value ? taScheduleOptions.value : raScheduleOptions.value))
+
+function syncFieldForRole() {
+  if (isTa.value) return
+  const options = fieldOptions.value
+  if (!options.length) return
+  if (!options.some((item) => item.value === form.techField)) {
+    form.techField = options[0].value
+  }
+}
 
 function tasksListQuery(status?: string) {
   const roleFromForm = form.roleType === 'TA' || form.roleType === 'INTERN' || form.roleType === 'RA'
@@ -86,6 +97,7 @@ onMounted(async () => {
         selectedLanguages.value = ['不限']
       }
     }
+    syncFieldForRole()
     return
   }
   try {
@@ -313,7 +325,7 @@ async function save(publish: boolean) {
         <a-radio-group
           v-model="form.roleType"
           type="button"
-          @change="() => { form.scheduleType = '' }"
+          @change="() => { form.scheduleType = ''; syncFieldForRole() }"
         >
           <a-radio v-for="item in TASK_ROLE_TYPES" :key="item.value" :value="item.value">{{ item.label }}</a-radio>
         </a-radio-group>
@@ -322,7 +334,7 @@ async function save(publish: boolean) {
         <a-col v-if="!isTa" :span="isIntern ? 16 : 24">
           <a-form-item :label="isRa ? '研究方向' : '技术领域'" required>
             <a-select v-model="form.techField">
-              <a-option v-for="item in techFieldOptions" :key="item.value" :value="item.value">{{ item.label }}</a-option>
+              <a-option v-for="item in fieldOptions" :key="item.value" :value="item.value">{{ item.label }}</a-option>
             </a-select>
           </a-form-item>
         </a-col>

@@ -249,6 +249,18 @@ export const CHALLENGE_PROPOSAL_TEMPLATE = `## 理解与切入点
 `
 
 export const TECH_FIELDS = ['前端开发', '后端开发', '全栈应用', '人工智能', '系统与底层', '开发工具', '数据与存储'] as const
+export const RESEARCH_DIRECTIONS = [
+  '人工智能',
+  '机器学习与数据挖掘',
+  '计算机视觉',
+  '自然语言处理',
+  '网络安全',
+  '系统与网络',
+  '软件工程',
+  '人机交互',
+  '边缘计算与物联网',
+  '科学计算',
+] as const
 export const DIFFICULTIES = ['L1', 'L2', 'L3', 'L4', 'L5'] as const
 export const SUPPORT_LANGUAGES = ['中文', 'English', '中英双语'] as const
 export const PROGRAMMING_LANGUAGES = [

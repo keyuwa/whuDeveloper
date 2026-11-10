@@ -117,7 +117,7 @@ watch(
                 <span>{{ task.publisherName }}</span>
               </div>
               <div class="meta-row">
-                <span class="meta-label">技术领域</span>
+                <span class="meta-label">{{ task.roleType === 'RA' ? '研究方向' : '技术领域' }}</span>
                 <div class="tag-wrap">
                   <a-tag color="arcoblue" size="small">{{ task.techField }}</a-tag>
                   <a-tag v-for="tag in techFieldTags" :key="tag" size="small">{{ tag }}</a-tag>

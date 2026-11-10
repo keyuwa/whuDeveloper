@@ -26,6 +26,7 @@ public class DictService {
             "TA_SCHEDULE",
             "RA_SCHEDULE",
             "TECH_FIELD",
+            "RESEARCH_DIRECTION",
             "SUPPORT_LANGUAGE",
             "PROGRAMMING_LANGUAGE",
             "DIFFICULTY",
@@ -33,16 +34,17 @@ public class DictService {
             "WEEKLY_HOURS_RANGE"
     );
 
-    public static final Map<String, String> DICT_TYPE_LABELS = Map.of(
-            "STUDENT_IDENTITY", "在读身份",
-            "TA_SCHEDULE", "助教学期",
-            "RA_SCHEDULE", "科研周期",
-            "TECH_FIELD", "技术领域 / 研究方向",
-            "SUPPORT_LANGUAGE", "支持语言",
-            "PROGRAMMING_LANGUAGE", "编程语言",
-            "DIFFICULTY", "项目难度",
-            "DURATION_RANGE", "开发周期筛选",
-            "WEEKLY_HOURS_RANGE", "每周投入筛选"
+    public static final Map<String, String> DICT_TYPE_LABELS = Map.ofEntries(
+            Map.entry("STUDENT_IDENTITY", "在读身份"),
+            Map.entry("TA_SCHEDULE", "助教学期"),
+            Map.entry("RA_SCHEDULE", "科研周期"),
+            Map.entry("TECH_FIELD", "技术领域"),
+            Map.entry("RESEARCH_DIRECTION", "研究方向"),
+            Map.entry("SUPPORT_LANGUAGE", "支持语言"),
+            Map.entry("PROGRAMMING_LANGUAGE", "编程语言"),
+            Map.entry("DIFFICULTY", "项目难度"),
+            Map.entry("DURATION_RANGE", "开发周期筛选"),
+            Map.entry("WEEKLY_HOURS_RANGE", "每周投入筛选")
     );
 
     private final DictItemRepository items;

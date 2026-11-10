@@ -63,6 +63,7 @@ const modules = TASK_ROLE_TYPES.map((item) => ({
 }))
 
 const techOptions = dictOptions('TECH_FIELD')
+const researchOptions = dictOptions('RESEARCH_DIRECTION')
 const durationOptions = dictOptions('DURATION_RANGE')
 const taScheduleOptions = dictOptions('TA_SCHEDULE')
 const weeklyOptions = dictOptions('WEEKLY_HOURS_RANGE')
@@ -97,7 +98,7 @@ const filterSections = computed<FilterSection[]>(() => {
     ]
   }
   return [
-    { key: 'techFields', label: '研究方向', options: techOptions.value },
+    { key: 'techFields', label: '研究方向', options: researchOptions.value },
   ]
 })
 
@@ -170,7 +171,7 @@ const selectedChips = computed<SelectedChip[]>(() => {
     pushMany('weeklyHours', filters.weeklyHours, weeklyOptions.value, '每周投入')
     pushMany('educationLevels', filters.educationLevels, educationOptions.value, '在读身份')
   } else {
-    pushMany('techFields', filters.techFields, techOptions.value, '研究方向')
+    pushMany('techFields', filters.techFields, researchOptions.value, '研究方向')
   }
   if (filters.keyword.trim()) {
     chips.push({
