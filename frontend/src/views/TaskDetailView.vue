@@ -34,6 +34,8 @@ const applicationLabels: Record<string, string> = {
   REJECTED: '未通过',
 }
 const isChallenge = computed(() => task.value?.postingMode === 'CHALLENGE' || task.value?.roleType === 'RA')
+const isTeam = computed(() => task.value?.roleType === 'TEAM')
+const selectedPositionId = ref<number | null>(null)
 const challengeOpen = computed(() => {
   if (!task.value || !isChallenge.value) return task.value?.status === 'OPEN'
   if (task.value.status !== 'OPEN') return false
@@ -41,12 +43,18 @@ const challengeOpen = computed(() => {
   if (task.value.bidDeadline && new Date(task.value.bidDeadline).getTime() < Date.now()) return false
   return true
 })
+const openPositions = computed(() =>
+  (task.value?.positions || []).filter((item) => item.filled < item.quota),
+)
 const proposalGuideHtml = computed(() =>
   renderMarkdown(isChallenge.value ? CHALLENGE_PROPOSAL_TEMPLATE : PROPOSAL_TEMPLATE),
 )
 const myProposalHtml = computed(() => renderMarkdown(myApplication.value?.proposalMd || ''))
 const canSubmitApplication = computed(
-  () => Boolean(proposalText.value.trim() || proposalFile.value) && challengeOpen.value,
+  () =>
+    Boolean(proposalText.value.trim() || proposalFile.value) &&
+    challengeOpen.value &&
+    (!isTeam.value || selectedPositionId.value != null),
 )
 function selectProposal(event: Event) {
   const input = event.target as HTMLInputElement
@@ -87,7 +95,12 @@ async function load() {
   await loadDicts()
   proposalFile.value = null
   myApplication.value = null
+  selectedPositionId.value = null
   task.value = await api<Task>(`/api/v1/tasks/${id.value}`)
+  if (task.value.roleType === 'TEAM') {
+    const firstOpen = (task.value.positions || []).find((item) => item.filled < item.quota)
+    selectedPositionId.value = firstOpen?.id ?? task.value.positions?.[0]?.id ?? null
+  }
   if (isStudent.value) {
     const me = await api<User>('/api/v1/me/resume')
     if (auth.token && auth.user) setSession(auth.token, { ...auth.user, ...me })
@@ -118,6 +131,10 @@ async function apply() {
   }
   const text = proposalText.value.trim()
   if (!challengeOpen.value) return Message.error(isChallenge.value ? '揭榜已截止或已结束' : '项目未开放申请')
+  if (isTeam.value && selectedPositionId.value == null) {
+    scrollToApply()
+    return Message.error('请选择要申请的岗位')
+  }
   if (!text && !proposalFile.value) {
     scrollToApply()
     return Message.error(isChallenge.value ? '请填写方案内容，或上传 PDF 附件' : '请填写申请内容，或上传 PDF 附件')
@@ -128,6 +145,9 @@ async function apply() {
     const body = new FormData()
     body.append('proposalText', text)
     if (proposalFile.value) body.append('file', proposalFile.value)
+    if (isTeam.value && selectedPositionId.value != null) {
+      body.append('positionId', String(selectedPositionId.value))
+    }
     await api(`/api/v1/tasks/${id.value}/applications`, {
       method: 'POST',
       body,
@@ -275,8 +295,26 @@ async function startChat() {
             <p class="application-intro">
               {{ isChallenge
                 ? '本科研任务采用揭榜：提交研究方案（文字或 PDF 至少一种）。多人可并行竞标，发布方比选后揭榜入项。'
-                : '可直接填写文字申请，也可另附 PDF；至少提供其中一种。支持 Markdown。' }}
+                : isTeam
+                  ? '请先选择岗位，再填写申请内容或上传 PDF；每个项目仅可申请一次。'
+                  : '可直接填写文字申请，也可另附 PDF；至少提供其中一种。支持 Markdown。' }}
             </p>
+            <div v-if="isTeam" class="position-pick" style="margin-bottom: 14px">
+              <strong style="display: block; margin-bottom: 8px">选择岗位</strong>
+              <a-radio-group v-model="selectedPositionId" direction="vertical">
+                <a-radio
+                  v-for="item in task.positions || []"
+                  :key="item.id"
+                  :value="item.id"
+                  :disabled="item.filled >= item.quota"
+                >
+                  {{ item.title }} · 名额 {{ item.filled }}/{{ item.quota }}
+                  <span v-if="item.requirement" style="color: #6b7280; margin-left: 8px">{{ item.requirement }}</span>
+                  <a-tag v-if="item.filled >= item.quota" size="small" color="gray" style="margin-left: 8px">已满</a-tag>
+                </a-radio>
+              </a-radio-group>
+              <p v-if="!openPositions.length" style="color: #c0362c; margin: 8px 0 0">当前岗位均已满额</p>
+            </div>
             <div class="application-guide">
               <strong>结构提示（填写时可参考，不会自动写入正文）</strong>
               <article class="md-body proposal-guide" v-html="proposalGuideHtml" />
@@ -306,6 +344,7 @@ async function startChat() {
           <template v-else>
             <div class="application-actions"><a-tag color="arcoblue">{{ applicationLabels[task.myApplicationStatus || ''] || task.myApplicationStatus }}</a-tag><a-button v-if="task.projectId" type="primary" @click="router.push(`/me/projects/${task.projectId}/progress`)">进入工作台</a-button></div>
             <p class="application-intro">
+              <template v-if="myApplication?.positionTitle">已申请岗位：{{ myApplication.positionTitle }} · </template>
               {{ task.myApplicationStatus === 'SUBMITTED'
                 ? (isChallenge ? '方案已提交，请等待发布方比选揭榜。' : '申请已提交，请等待发布方审阅。')
                 : task.myApplicationStatus === 'ACCEPTED'
@@ -347,14 +386,28 @@ async function startChat() {
               <span class="meta-label">在读身份</span>
               <span>{{ task.educationLevels }}</span>
             </div>
-            <div v-if="task.roleType !== 'TA'" class="meta-row">
+            <div v-if="isTeam" class="meta-row">
+              <span class="meta-label">岗位</span>
+              <div>
+                <a-tag
+                  v-for="item in task.positions || []"
+                  :key="item.id"
+                  color="arcoblue"
+                  size="small"
+                  style="margin: 0 6px 6px 0"
+                >
+                  {{ item.title }} {{ item.filled }}/{{ item.quota }}
+                </a-tag>
+              </div>
+            </div>
+            <div v-else-if="task.roleType !== 'TA'" class="meta-row">
               <span class="meta-label">{{ task.roleType === 'RA' ? '研究方向' : '技术领域' }}</span>
               <div>
                 <a-tag color="arcoblue" size="small" style="margin-right: 6px">{{ task.techField }}</a-tag>
                 <a-tag v-for="tag in techFieldTags" :key="tag" size="small" style="margin: 0 6px 6px 0">{{ tag }}</a-tag>
               </div>
             </div>
-            <div v-if="task.roleType !== 'TA'" class="meta-row">
+            <div v-if="task.roleType !== 'TA' && !isTeam" class="meta-row">
               <span class="meta-label">编程语言</span>
               <div>
                 <a-tag v-for="tag in programmingTags" :key="tag" color="green" size="small" style="margin: 0 6px 6px 0">{{ tag }}</a-tag>

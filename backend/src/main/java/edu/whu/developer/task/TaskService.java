@@ -15,6 +15,8 @@ import edu.whu.developer.project.Project;
 import edu.whu.developer.project.ProjectRepository;
 import edu.whu.developer.report.WeeklyReportRepository;
 import edu.whu.developer.shortlist.TaskShortlistRepository;
+import edu.whu.developer.task.TaskDtos.PositionRequest;
+import edu.whu.developer.task.TaskDtos.PositionView;
 import edu.whu.developer.task.TaskDtos.PublisherTaskPage;
 import edu.whu.developer.task.TaskDtos.TaskPage;
 import edu.whu.developer.task.TaskDtos.TaskRequest;
@@ -25,8 +27,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -36,7 +40,7 @@ import java.util.stream.Collectors;
 @Service
 public class TaskService {
 
-    public static final Set<String> ROLE_TYPES = Set.of("TA", "INTERN", "RA");
+    public static final Set<String> ROLE_TYPES = Set.of("TA", "INTERN", "RA", "TEAM");
     public static final Set<String> TA_SCHEDULE_TYPES = Set.of("CURRENT_SEMESTER", "NEXT_SEMESTER", "LONG_TERM");
     public static final Set<String> RA_SCHEDULE_TYPES = Set.of("ONE_SEMESTER", "TWO_SEMESTERS", "YEAR_PLUS");
     public static final Set<String> EDUCATION_LEVELS = Set.of("本科生", "硕士生", "博士生");
@@ -47,10 +51,14 @@ public class TaskService {
             "人工智能", "机器学习与数据挖掘", "计算机视觉", "自然语言处理", "网络安全",
             "系统与网络", "软件工程", "人机交互", "边缘计算与物联网", "科学计算"
     );
+    public static final Set<String> TEAM_POSITIONS = Set.of(
+            "研发", "运营", "数据采集", "数据标注", "质检", "其它"
+    );
     public static final Set<String> LEVELS = Set.of("L1", "L2", "L3", "L4", "L5");
     public static final Set<String> SUPPORT_LANGUAGES = Set.of("中文", "English", "中英双语");
 
     private final TaskRepository tasks;
+    private final TaskPositionRepository taskPositions;
     private final UserRepository users;
     private final TaskApplicationRepository applications;
     private final ProjectRepository projects;
@@ -63,6 +71,7 @@ public class TaskService {
     private final DictService dicts;
 
     public TaskService(TaskRepository tasks,
+                       TaskPositionRepository taskPositions,
                        UserRepository users,
                        TaskApplicationRepository applications,
                        ProjectRepository projects,
@@ -74,6 +83,7 @@ public class TaskService {
                        AuditService audit,
                        DictService dicts) {
         this.tasks = tasks;
+        this.taskPositions = taskPositions;
         this.users = users;
         this.applications = applications;
         this.projects = projects;
@@ -195,7 +205,8 @@ public class TaskService {
                 totalClosed,
                 tasks.countByPublisherIdAndRoleType(publisherId, "TA"),
                 tasks.countByPublisherIdAndRoleType(publisherId, "INTERN"),
-                tasks.countByPublisherIdAndRoleType(publisherId, "RA"));
+                tasks.countByPublisherIdAndRoleType(publisherId, "RA"),
+                tasks.countByPublisherIdAndRoleType(publisherId, "TEAM"));
     }
 
     @Transactional
@@ -208,6 +219,7 @@ public class TaskService {
         assignPublicCode(task);
         task.setStatus(publish ? "OPEN" : "DRAFT");
         tasks.save(task);
+        syncPositions(task, request.positions());
         audit.record(publisher.getId(), "TASK", task.getId(), publish ? "PUBLISH" : "CREATE", task.getTitle());
         return toResponse(task, publisher);
     }
@@ -233,6 +245,7 @@ public class TaskService {
                 task.setChallengeStatus("OPEN");
             }
         }
+        syncPositions(task, request.positions());
         audit.record(
                 AuthSupport.current().getId(),
                 "TASK",
@@ -287,6 +300,7 @@ public class TaskService {
             projects.delete(project);
         }
         applications.deleteByTaskId(taskId);
+        taskPositions.deleteByTaskId(taskId);
         tasks.delete(task);
         audit.record(AuthSupport.current().getId(), "TASK", taskId, "DELETE", title);
     }
@@ -325,12 +339,13 @@ public class TaskService {
                 ? "L3"
                 : request.difficulty().trim().toUpperCase(Locale.ROOT);
         if (!ROLE_TYPES.contains(roleType)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务类型只能是 TA、INTERN 或 RA");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务类型只能是 TA、INTERN、RA 或 TEAM");
         }
         // 一期不采集支持语言，库字段保留默认值
         String support = "中文";
         Set<String> techFields = dictValues("TECH_FIELD", TECH_FIELDS);
         Set<String> researchDirections = dictValues("RESEARCH_DIRECTION", RESEARCH_DIRECTIONS);
+        Set<String> teamPositions = dictValues("TEAM_POSITION", TEAM_POSITIONS);
         Set<String> difficulties = dictValues("DIFFICULTY", LEVELS);
         Set<String> taSchedules = dictValues("TA_SCHEDULE", TA_SCHEDULE_TYPES);
         Set<String> identities = dictValues("STUDENT_IDENTITY", EDUCATION_LEVELS);
@@ -374,7 +389,7 @@ public class TaskService {
                 }
             }
             durationWeeks = weeksForSchedule(scheduleType);
-        } else {
+        } else if ("RA".equals(roleType)) {
             level = "L3";
             if (!researchDirections.contains(field)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "研究方向不合法");
@@ -385,10 +400,42 @@ public class TaskService {
             if (techStack.isBlank()) {
                 techStack = "科研协作";
             }
-            // 揭榜不强制科研周期；未填则不计学期档
             educationLevels = null;
             scheduleType = null;
             durationWeeks = 16;
+        } else {
+            // TEAM
+            level = "L3";
+            List<PositionRequest> positions = request.positions() == null ? List.of() : request.positions();
+            if (positions.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请至少添加一个岗位");
+            }
+            int totalQuota = 0;
+            for (PositionRequest position : positions) {
+                String direction = position.direction() == null || position.direction().isBlank()
+                        ? (position.title() == null ? "" : position.title().trim())
+                        : position.direction().trim();
+                if (!teamPositions.contains(direction)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "岗位不合法，请从字典选择或联系管理员新增");
+                }
+                if (position.quota() == null || position.quota() < 1) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "岗位名额至少为 1");
+                }
+                totalQuota += position.quota();
+            }
+            if (totalQuota > 200) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "项目总名额不能超过 200");
+            }
+            PositionRequest first = positions.get(0);
+            String firstDirection = first.direction() == null || first.direction().isBlank()
+                    ? (first.title() == null ? "" : first.title().trim())
+                    : first.direction().trim();
+            field = firstDirection;
+            languages = "不限";
+            techStack = "按岗协作";
+            educationLevels = null;
+            scheduleType = null;
+            durationWeeks = request.durationWeeks() == null ? 16 : request.durationWeeks();
         }
         String stipend = request.stipendText().trim();
         if (stipend.isBlank()) {
@@ -402,6 +449,13 @@ public class TaskService {
             }
             if (techReq.isBlank()) {
                 techReq = "具备相关领域基础研究能力";
+            }
+        } else if ("TEAM".equals(roleType)) {
+            if (output.isBlank()) {
+                output = "按所选岗位完成约定工作并提交周报";
+            }
+            if (techReq.isBlank()) {
+                techReq = "具备对应岗位所需基础能力，能按时参与协作";
             }
         } else {
             if (output.isBlank()) {
@@ -424,6 +478,8 @@ public class TaskService {
         Integer estimatedHours = request.estimatedHours();
         if ("RA".equals(roleType)) {
             estimatedHours = estimatedHours == null ? 1 : estimatedHours;
+        } else if ("TEAM".equals(roleType)) {
+            estimatedHours = estimatedHours == null ? 8 : estimatedHours;
         } else if (estimatedHours == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写预估工时");
         }
@@ -465,11 +521,64 @@ public class TaskService {
             if (!"AWARDED".equals(task.getChallengeStatus()) && !"CLOSED".equals(task.getChallengeStatus())) {
                 task.setChallengeStatus("OPEN");
             }
+        } else if ("TEAM".equals(roleType)) {
+            task.setPostingMode("STANDARD");
+            task.setBidDeadline(null);
+            task.setChallengeStatus(null);
+            int totalQuota = request.positions().stream().mapToInt(PositionRequest::quota).sum();
+            task.setQuota(totalQuota);
         } else {
             task.setPostingMode("STANDARD");
             task.setBidDeadline(null);
             task.setChallengeStatus(null);
+            if (request.quota() == null || request.quota() < 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写名额");
+            }
             task.setQuota(request.quota());
+        }
+    }
+
+    private void syncPositions(Task task, List<PositionRequest> requests) {
+        if (!"TEAM".equals(task.getRoleType())) {
+            taskPositions.deleteByTaskId(task.getId());
+            return;
+        }
+        List<PositionRequest> positions = requests == null ? List.of() : requests;
+        if (positions.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请至少添加一个岗位");
+        }
+        List<TaskPosition> existing = taskPositions.findByTaskIdOrderBySortOrderAscIdAsc(task.getId());
+        Set<Long> keep = new HashSet<>();
+        int order = 0;
+        for (PositionRequest req : positions) {
+            TaskPosition pos;
+            if (req.id() != null) {
+                pos = taskPositions.findByIdAndTaskId(req.id(), task.getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "岗位不存在或不属于本任务"));
+            } else {
+                pos = new TaskPosition();
+                pos.setTask(task);
+            }
+            String direction = req.direction() == null || req.direction().isBlank()
+                    ? req.title().trim()
+                    : req.direction().trim();
+            String title = req.title() == null || req.title().isBlank() ? direction : req.title().trim();
+            pos.setTitle(title);
+            pos.setDirection(direction);
+            pos.setQuota(req.quota());
+            pos.setRequirement(req.requirement() == null || req.requirement().isBlank() ? null : req.requirement().trim());
+            pos.setSortOrder(order++);
+            taskPositions.save(pos);
+            keep.add(pos.getId());
+        }
+        for (TaskPosition old : existing) {
+            if (keep.contains(old.getId())) {
+                continue;
+            }
+            if (applications.existsByPositionId(old.getId())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "岗位「" + old.getTitle() + "」已有申请，无法删除");
+            }
+            taskPositions.delete(old);
         }
     }
 
@@ -494,6 +603,18 @@ public class TaskService {
                 projectId = projects.findByApplicationId(applicationId).map(project -> project.getId()).orElse(null);
             }
             shortlisted = shortlists.existsByStudentIdAndTaskId(viewer.getId(), task.getId());
+        }
+        List<PositionView> positionViews = new ArrayList<>();
+        if ("TEAM".equals(task.getRoleType())) {
+            for (TaskPosition position : taskPositions.findByTaskIdOrderBySortOrderAscIdAsc(task.getId())) {
+                positionViews.add(new PositionView(
+                        position.getId(),
+                        position.getTitle(),
+                        position.getDirection(),
+                        position.getQuota(),
+                        projects.countByPositionIdAndStatusNot(position.getId(), "TERMINATED"),
+                        position.getRequirement()));
+            }
         }
         return new TaskResponse(
                 task.getId(),
@@ -534,7 +655,8 @@ public class TaskService {
                 applicationId,
                 applicationStatus,
                 projectId,
-                shortlisted);
+                shortlisted,
+                positionViews);
     }
 
     private Set<String> dictValues(String type, Set<String> fallback) {
@@ -551,6 +673,7 @@ public class TaskService {
         String prefix = switch (roleType) {
             case "TA" -> "TA";
             case "RA" -> "RA";
+            case "TEAM" -> "TEAM";
             default -> "DEV";
         };
         task.setRoleSerial(next);

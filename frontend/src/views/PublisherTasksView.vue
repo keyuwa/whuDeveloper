@@ -21,9 +21,11 @@ const hasMore = ref(false)
 const ROLE_STORAGE_KEY = 'publisher.tasks.roleType'
 const STATUS_STORAGE_KEY = 'publisher.tasks.status'
 
-function parseRoleTab(value: unknown): 'TA' | 'INTERN' | 'RA' | null {
+function parseRoleTab(value: unknown): 'TA' | 'INTERN' | 'RA' | 'TEAM' | null {
   const normalized = String(value || '').toUpperCase()
-  return normalized === 'TA' || normalized === 'INTERN' || normalized === 'RA' ? normalized : null
+  return normalized === 'TA' || normalized === 'INTERN' || normalized === 'RA' || normalized === 'TEAM'
+    ? normalized
+    : null
 }
 
 function parseStatusTab(value: unknown): 'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED' | null {
@@ -33,7 +35,7 @@ function parseStatusTab(value: unknown): 'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED' | n
     : null
 }
 
-function initialRoleTab(): 'TA' | 'INTERN' | 'RA' {
+function initialRoleTab(): 'TA' | 'INTERN' | 'RA' | 'TEAM' {
   return (
     parseRoleTab(route.query.roleType) ||
     parseRoleTab(sessionStorage.getItem(ROLE_STORAGE_KEY)) ||
@@ -49,9 +51,9 @@ function initialStatusTab(): 'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED' {
   )
 }
 
-const roleTab = ref<'TA' | 'INTERN' | 'RA'>(initialRoleTab())
+const roleTab = ref<'TA' | 'INTERN' | 'RA' | 'TEAM'>(initialRoleTab())
 const statusTab = ref<'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED'>(initialStatusTab())
-const roleCounts = ref({ TA: 0, INTERN: 0, RA: 0 })
+const roleCounts = ref({ TA: 0, INTERN: 0, RA: 0, TEAM: 0 })
 const loadMoreSentinel = ref<HTMLElement | null>(null)
 let loadMoreObserver: IntersectionObserver | null = null
 let syncingQuery = false
@@ -150,6 +152,7 @@ async function fetchPage(nextPage: number, append: boolean) {
     TA: result.totalTa,
     INTERN: result.totalIntern,
     RA: result.totalRa,
+    TEAM: result.totalTeam,
   }
 }
 
@@ -320,7 +323,7 @@ function openInbox(taskId?: number) {
         :class="{ active: roleTab === item.value }"
         @click="roleTab = item.value"
       >
-        <span class="role-name">{{ item.label }}</span>
+        <span class="role-name">{{ isMobile ? item.shortLabel : item.label }}</span>
         <span class="role-count">{{ roleCounts[item.value] }}</span>
       </button>
     </nav>
@@ -345,7 +348,14 @@ function openInbox(taskId?: number) {
             <a-space wrap style="margin-bottom: 8px">
               <a-tag size="small">{{ task.publicCode }}</a-tag>
               <a-tag color="arcoblue" size="small">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
-              <a-tag v-if="task.roleType !== 'TA'" size="small">{{ task.techField }}</a-tag>
+              <a-tag v-if="task.roleType !== 'TA' && task.roleType !== 'TEAM'" size="small">{{ task.techField }}</a-tag>
+              <a-tag
+                v-for="pos in task.roleType === 'TEAM' ? task.positions || [] : []"
+                :key="pos.id"
+                size="small"
+              >
+                {{ pos.title }} {{ pos.filled }}/{{ pos.quota }}
+              </a-tag>
               <a-tag v-if="task.roleType === 'INTERN'" size="small">{{ task.difficulty }}</a-tag>
               <a-tag :color="statusColor[task.status] || 'gray'" size="small">
                 {{ statusLabel[task.status] || task.status }}
@@ -359,6 +369,7 @@ function openInbox(taskId?: number) {
               已入项 {{ task.filled }}/{{ task.quota }}
               <template v-if="(task.pendingApplications || 0) > 0"> · 待审申请 {{ task.pendingApplications }}</template>
               <template v-if="task.roleType === 'INTERN'"> · {{ task.programmingLanguages }} · {{ task.durationWeeks }} 周</template>
+              <template v-if="task.roleType === 'TEAM'"> · {{ task.durationWeeks }} 周</template>
               <template v-if="task.stipendText"> · {{ task.stipendText }}</template>
             </a-typography-text>
 
@@ -464,7 +475,7 @@ function openInbox(taskId?: number) {
 <style scoped>
 .role-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 0 0 12px;
 }
@@ -493,6 +504,10 @@ function openInbox(taskId?: number) {
   font-size: 14px;
   font-weight: 700;
   color: #111827;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .role-tab.active .role-name {
   color: #1d4ed8;
@@ -501,16 +516,28 @@ function openInbox(taskId?: number) {
   font-size: 12px;
   color: #6b7280;
   font-weight: 600;
+  flex-shrink: 0;
 }
 .role-tabs.compact {
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
 }
 .role-tabs.compact .role-tab {
-  padding: 10px 12px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 4px;
   border-radius: 10px;
+  text-align: center;
 }
 .role-tabs.compact .role-name {
   font-size: 13px;
+  white-space: nowrap;
+}
+.role-tabs.compact .role-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 .status-tabs {
   margin: 4px 0 14px;

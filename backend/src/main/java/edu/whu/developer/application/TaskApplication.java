@@ -2,6 +2,7 @@ package edu.whu.developer.application;
 
 import edu.whu.developer.auth.User;
 import edu.whu.developer.task.Task;
+import edu.whu.developer.task.TaskPosition;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -33,6 +34,11 @@ public class TaskApplication {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "task_id", nullable = false)
     private Task task;
+
+    /** 项目岗位；仅 TEAM 必填 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "position_id")
+    private TaskPosition position;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "student_id", nullable = false)

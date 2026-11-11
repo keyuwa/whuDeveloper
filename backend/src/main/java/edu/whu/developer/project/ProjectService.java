@@ -62,6 +62,13 @@ public class ProjectService {
         return projects.findByApplicationId(application.getId())
                 .map(this::toResponse)
                 .orElseGet(() -> {
+                    if (application.getPosition() != null) {
+                        long positionUsed = projects.countByPositionIdAndStatusNot(
+                                application.getPosition().getId(), "TERMINATED");
+                        if (positionUsed >= application.getPosition().getQuota()) {
+                            throw new ResponseStatusException(HttpStatus.CONFLICT, "该岗位名额已满");
+                        }
+                    }
                     long used = projects.countByTaskIdAndStatusNot(application.getTask().getId(), "TERMINATED");
                     if (used >= application.getTask().getQuota()) {
                         throw new ResponseStatusException(HttpStatus.CONFLICT, "名额已满");

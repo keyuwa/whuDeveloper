@@ -41,12 +41,18 @@ const form = reactive({
   bidDeadline: '' as string,
 })
 const bidLongTerm = ref(true)
+const positions = ref<{ id?: number; title: string; direction: string; quota: number; requirement: string }[]>([
+  { title: '研发', direction: '研发', quota: 3, requirement: '' },
+  { title: '运营', direction: '运营', quota: 20, requirement: '' },
+])
 
 const isIntern = computed(() => form.roleType === 'INTERN')
 const isTa = computed(() => form.roleType === 'TA')
 const isRa = computed(() => form.roleType === 'RA')
+const isTeam = computed(() => form.roleType === 'TEAM')
 const techFieldDictOptions = dictOptions('TECH_FIELD')
 const researchDirectionOptions = dictOptions('RESEARCH_DIRECTION')
+const teamPositionOptions = dictOptions('TEAM_POSITION')
 const fieldOptions = computed(() => (isRa.value ? researchDirectionOptions.value : techFieldDictOptions.value))
 const difficultyOptions = dictOptions('DIFFICULTY')
 const educationOptions = dictItems('STUDENT_IDENTITY')
@@ -54,9 +60,10 @@ const programmingLanguageOptions = dictOptions('PROGRAMMING_LANGUAGE')
 const taScheduleOptions = dictOptions('TA_SCHEDULE')
 const raScheduleOptions = dictOptions('RA_SCHEDULE')
 const scheduleOptions = computed(() => (isTa.value ? taScheduleOptions.value : raScheduleOptions.value))
+const teamQuotaTotal = computed(() => positions.value.reduce((sum, item) => sum + (Number(item.quota) || 0), 0))
 
 function syncFieldForRole() {
-  if (isTa.value) return
+  if (isTa.value || isTeam.value) return
   const options = fieldOptions.value
   if (!options.length) return
   if (!options.some((item) => item.value === form.techField)) {
@@ -64,14 +71,37 @@ function syncFieldForRole() {
   }
 }
 
+function addPosition() {
+  const first = teamPositionOptions.value[0]?.value || '其它'
+  positions.value.push({ title: first, direction: first, quota: 5, requirement: '' })
+}
+
+function onPositionDirectionChange(index: number, value: string) {
+  const row = positions.value[index]
+  if (!row) return
+  row.direction = value
+  row.title = value
+}
+
+function removePosition(index: number) {
+  if (positions.value.length <= 1) {
+    Message.warning('至少保留一个岗位')
+    return
+  }
+  positions.value.splice(index, 1)
+}
+
 function tasksListQuery(status?: string) {
-  const roleFromForm = form.roleType === 'TA' || form.roleType === 'INTERN' || form.roleType === 'RA'
-    ? form.roleType
-    : null
+  const roleFromForm =
+    form.roleType === 'TA' || form.roleType === 'INTERN' || form.roleType === 'RA' || form.roleType === 'TEAM'
+      ? form.roleType
+      : null
   const roleFromQuery = String(route.query.roleType || '').toUpperCase()
   const roleType =
     roleFromForm ||
-    (roleFromQuery === 'TA' || roleFromQuery === 'INTERN' || roleFromQuery === 'RA' ? roleFromQuery : 'INTERN')
+    (roleFromQuery === 'TA' || roleFromQuery === 'INTERN' || roleFromQuery === 'RA' || roleFromQuery === 'TEAM'
+      ? roleFromQuery
+      : 'INTERN')
   const statusFromQuery = String(route.query.status || '').toUpperCase()
   const nextStatus =
     status ||
@@ -91,7 +121,7 @@ onMounted(async () => {
   await loadDicts()
   if (!route.params.id) {
     const queryRole = String(route.query.roleType || '').toUpperCase()
-    if (queryRole === 'TA' || queryRole === 'INTERN' || queryRole === 'RA') {
+    if (queryRole === 'TA' || queryRole === 'INTERN' || queryRole === 'RA' || queryRole === 'TEAM') {
       form.roleType = queryRole
       if (queryRole !== 'INTERN' && selectedLanguages.value.includes('TypeScript')) {
         selectedLanguages.value = ['不限']
@@ -129,6 +159,15 @@ onMounted(async () => {
       bidDeadline: task.bidDeadline ? task.bidDeadline.slice(0, 19) : '',
     })
     bidLongTerm.value = task.roleType === 'RA' ? !task.bidDeadline : true
+    if (task.roleType === 'TEAM' && task.positions?.length) {
+      positions.value = task.positions.map((item) => ({
+        id: item.id,
+        title: item.title,
+        direction: item.direction,
+        quota: item.quota,
+        requirement: item.requirement || '',
+      }))
+    }
     selectedLanguages.value = task.programmingLanguages
       .split(',')
       .map((item) => item.trim())
@@ -242,11 +281,27 @@ async function save(publish: boolean) {
     Message.error('请设置揭榜截止时间，或勾选长期开放')
     return
   }
+  if (isTeam.value) {
+    if (!positions.value.length) {
+      Message.error('请至少添加一个岗位')
+      return
+    }
+    for (const item of positions.value) {
+      if (!item.direction) {
+        Message.error('请选择岗位')
+        return
+      }
+      if (!item.quota || item.quota < 1) {
+        Message.error('岗位名额至少为 1')
+        return
+      }
+    }
+  }
   if (isTa.value && selectedEducations.value.length === 0) {
     Message.error('请选择在读身份')
     return
   }
-  if (!isRa.value && !form.techRequirement.trim()) {
+  if (!isRa.value && !isTeam.value && !form.techRequirement.trim()) {
     Message.error('请填写能力要求')
     return
   }
@@ -272,12 +327,12 @@ async function save(publish: boolean) {
     const method = route.params.id ? 'PUT' : 'POST'
     const payload = {
       ...form,
-      techField: isTa.value ? '教学助教' : form.techField,
+      techField: isTa.value ? '教学助教' : isTeam.value ? positions.value[0]?.direction || '其它' : form.techField,
       difficulty: isIntern.value ? form.difficulty : 'L3',
       repoUrl: isIntern.value ? form.repoUrl || null : null,
-      scheduleType: isIntern.value || isRa.value ? null : form.scheduleType || null,
+      scheduleType: isIntern.value || isRa.value || isTeam.value ? null : form.scheduleType || null,
       educationLevels: isTa.value ? form.educationLevels : null,
-      durationWeeks: isIntern.value ? form.durationWeeks : null,
+      durationWeeks: isIntern.value || isTeam.value ? form.durationWeeks : null,
       estimatedHours: isRa.value ? null : form.estimatedHours,
       supportLanguages: null,
       stipendText: form.stipendText.trim(),
@@ -285,8 +340,17 @@ async function save(publish: boolean) {
       prdFileName: isIntern.value ? form.prdFileName || null : null,
       techDocFileUrl: isIntern.value ? form.techDocFileUrl || null : null,
       techDocFileName: isIntern.value ? form.techDocFileName || null : null,
-      quota: form.quota,
+      quota: isTeam.value ? teamQuotaTotal.value : form.quota,
       bidDeadline: isRa.value && !bidLongTerm.value && form.bidDeadline ? form.bidDeadline : null,
+      positions: isTeam.value
+        ? positions.value.map((item) => ({
+            id: item.id || null,
+            title: (item.title || item.direction).trim(),
+            direction: item.direction,
+            quota: item.quota,
+            requirement: item.requirement.trim() || null,
+          }))
+        : null,
     }
     await api<Task>(path, { method, body: JSON.stringify(payload) })
     Message.success(publish ? '已发布' : '已保存草稿')
@@ -310,6 +374,14 @@ async function save(publish: boolean) {
       科研 RA 采用揭榜：发布开放方向，学生提交方案；可同时揭榜多人，截止时间可设也可长期开放。
     </a-alert>
     <a-alert
+      v-if="isTeam"
+      type="info"
+      style="margin-bottom: 16px"
+      title="项目 · 一任务多岗位"
+    >
+      助教 / 开发 / 科研以外的需求放这里。可挂多个岗位（字典维护），各岗位独立名额，适合数据集、运营等场景。
+    </a-alert>
+    <a-alert
       v-if="isMobile"
       type="info"
       style="margin-bottom: 16px"
@@ -330,8 +402,8 @@ async function save(publish: boolean) {
           <a-radio v-for="item in TASK_ROLE_TYPES" :key="item.value" :value="item.value">{{ item.label }}</a-radio>
         </a-radio-group>
       </a-form-item>
-      <a-row :gutter="12">
-        <a-col v-if="!isTa" :span="isIntern ? 16 : 24">
+      <a-row v-if="!isTa && !isTeam" :gutter="12">
+        <a-col :span="isIntern ? 16 : 24">
           <a-form-item :label="isRa ? '研究方向' : '技术领域'" required>
             <a-select v-model="form.techField">
               <a-option v-for="item in fieldOptions" :key="item.value" :value="item.value">{{ item.label }}</a-option>
@@ -351,10 +423,29 @@ async function save(publish: boolean) {
           <a-checkbox v-for="item in educationOptions" :key="item.value" :value="item.value">{{ item.label }}</a-checkbox>
         </a-checkbox-group>
       </a-form-item>
+      <div v-if="isTeam" class="positions-block">
+        <div class="positions-head">
+          <strong>岗位设置</strong>
+          <span class="positions-total">总名额 {{ teamQuotaTotal }}</span>
+          <a-button size="mini" type="outline" @click="addPosition">添加岗位</a-button>
+        </div>
+        <div v-for="(item, index) in positions" :key="index" class="position-row">
+          <a-select
+            :model-value="item.direction"
+            placeholder="选择岗位"
+            @change="(value) => onPositionDirectionChange(index, String(value || ''))"
+          >
+            <a-option v-for="opt in teamPositionOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</a-option>
+          </a-select>
+          <a-input-number v-model="item.quota" :min="1" :max="200" placeholder="名额" />
+          <a-input v-model="item.requirement" placeholder="岗位要求（可选）" />
+          <a-button size="mini" status="danger" type="text" @click="removePosition(index)">删除</a-button>
+        </div>
+      </div>
       <a-row :gutter="[16, 8]" class="meta-row">
-        <a-col :xs="24" :sm="12" :lg="8">
+        <a-col v-if="!isTeam" :xs="24" :sm="12" :lg="8">
           <a-form-item :label="isRa ? '揭榜名额' : '名额'">
-            <a-input-number v-model="form.quota" :min="1" style="width: 100%" />
+            <a-input-number v-model="form.quota" :min="1" :max="isRa ? 50 : 50" style="width: 100%" />
           </a-form-item>
         </a-col>
         <a-col v-if="isRa" :xs="24" :sm="12" :lg="16">
@@ -378,8 +469,8 @@ async function save(publish: boolean) {
             </div>
           </a-form-item>
         </a-col>
-        <a-col v-if="isIntern" :xs="24" :sm="12" :lg="8">
-          <a-form-item label="开发周期">
+        <a-col v-if="isIntern || isTeam" :xs="24" :sm="12" :lg="8">
+          <a-form-item :label="isTeam ? '周期' : '开发周期'">
             <a-input-number v-model="form.durationWeeks" :min="1" style="width: 100%">
               <template #suffix>周</template>
             </a-input-number>
@@ -681,6 +772,36 @@ async function save(publish: boolean) {
   align-items: center;
   gap: 12px;
   width: 100%;
+}
+.positions-block {
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  background: #fafbfc;
+}
+.positions-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.positions-total {
+  margin-right: auto;
+  font-size: 13px;
+  color: #6b7280;
+}
+.position-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.2fr) 100px minmax(0, 1.6fr) auto;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+@media (max-width: 800px) {
+  .position-row {
+    grid-template-columns: 1fr;
+  }
 }
 .meta-row :deep(.arco-form-item-label) {
   white-space: nowrap;

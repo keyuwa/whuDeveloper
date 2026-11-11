@@ -18,6 +18,15 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
     long countByTaskIdAndStatusNot(Long taskId, String status);
 
+    @Query("""
+            SELECT COUNT(p) FROM Project p
+            WHERE p.application.position.id = :positionId AND p.status <> :excludedStatus
+            """)
+    long countByPositionIdAndStatusNot(
+            @Param("positionId") Long positionId,
+            @Param("excludedStatus") String excludedStatus
+    );
+
     boolean existsByTaskId(Long taskId);
 
     boolean existsByTaskIdAndStudentId(Long taskId, Long studentId);

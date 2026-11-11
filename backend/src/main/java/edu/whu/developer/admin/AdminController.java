@@ -182,7 +182,7 @@ public class AdminController {
         settings.put(
                 "tutorial_banner_text",
                 request.tutorialBannerText() == null || request.tutorialBannerText().isBlank()
-                        ? "系统使用教程请参考平台文档，点击查看完整说明。"
+                        ? "查看使用教程"
                         : request.tutorialBannerText().trim());
         audit.record(admin.getId(), "SETTINGS", 0L, "UPDATE", "tutorial");
         return currentSettings();
@@ -211,7 +211,7 @@ public class AdminController {
                 settings.getInt("review_sla_days", 7),
                 settings.getInt("escalate_sla_days", 14),
                 settings.getString("tutorial_doc_url", ""),
-                settings.getString("tutorial_banner_text", "系统使用教程请参考平台文档，点击查看完整说明。"),
+                settings.getString("tutorial_banner_text", "查看使用教程"),
                 settings.getString("ability_rubric_md", ""),
                 settings.getBoolean("ark_enabled", false),
                 maskSecret(apiKey),

@@ -62,6 +62,16 @@ export interface Task {
   myApplicationStatus: string | null
   projectId: number | null
   shortlisted?: boolean
+  positions?: TaskPosition[]
+}
+
+export interface TaskPosition {
+  id: number
+  title: string
+  direction: string
+  quota: number
+  filled: number
+  requirement: string | null
 }
 
 export interface TaskPage {
@@ -80,6 +90,7 @@ export interface PublisherTaskPage extends TaskPage {
   totalTa: number
   totalIntern: number
   totalRa: number
+  totalTeam: number
 }
 
 export interface Application {
@@ -89,6 +100,9 @@ export interface Application {
   taskType: string
   taskRoleType?: string
   postingMode?: string
+  positionId?: number | null
+  positionTitle?: string | null
+  positionDirection?: string | null
   studentId: number
   studentName: string
   realName: string | null
@@ -227,16 +241,20 @@ export interface AuditEvent {
 }
 
 export const TASK_ROLE_TYPES = [
-  { value: 'TA', label: '助教 TA' },
-  { value: 'INTERN', label: '开发 Intern' },
-  { value: 'RA', label: '科研 RA' },
+  { value: 'TA', label: '助教 TA', shortLabel: '助教' },
+  { value: 'INTERN', label: '开发 Intern', shortLabel: '开发' },
+  { value: 'RA', label: '科研 RA', shortLabel: '科研' },
+  { value: 'TEAM', label: '项目', shortLabel: '项目' },
 ] as const
 
 export const TASK_ROLE_LABEL: Record<string, string> = {
   TA: '助教 TA',
   INTERN: '开发 Intern',
   RA: '科研 RA',
+  TEAM: '项目',
 }
+
+export const TEAM_POSITIONS = ['研发', '运营', '数据采集', '数据标注', '质检', '其它'] as const
 
 export const CHALLENGE_STATUS_LABEL: Record<string, string> = {
   OPEN: '揭榜中',

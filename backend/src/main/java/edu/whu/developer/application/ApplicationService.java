@@ -14,6 +14,8 @@ import edu.whu.developer.project.ProjectRepository;
 import edu.whu.developer.project.ProjectService;
 import edu.whu.developer.shortlist.TaskShortlistRepository;
 import edu.whu.developer.task.Task;
+import edu.whu.developer.task.TaskPosition;
+import edu.whu.developer.task.TaskPositionRepository;
 import edu.whu.developer.task.TaskRepository;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -31,6 +33,7 @@ import java.util.List;
 public class ApplicationService {
 
     private final TaskRepository tasks;
+    private final TaskPositionRepository taskPositions;
     private final TaskApplicationRepository applications;
     private final UserRepository users;
     private final ProjectRepository projects;
@@ -43,6 +46,7 @@ public class ApplicationService {
     private final ApplicationAiReviewService aiReview;
 
     public ApplicationService(TaskRepository tasks,
+                              TaskPositionRepository taskPositions,
                               TaskApplicationRepository applications,
                               UserRepository users,
                               ProjectRepository projects,
@@ -54,6 +58,7 @@ public class ApplicationService {
                               PointService points,
                               ApplicationAiReviewService aiReview) {
         this.tasks = tasks;
+        this.taskPositions = taskPositions;
         this.applications = applications;
         this.users = users;
         this.projects = projects;
@@ -69,6 +74,7 @@ public class ApplicationService {
     @Transactional
     public ApplicationResponse submit(Long taskId,
                                       String proposalText,
+                                      Long positionId,
                                       org.springframework.web.multipart.MultipartFile file) {
         AuthUser student = AuthSupport.requireRole(Role.STUDENT);
         Task task = tasks.findById(taskId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在"));
@@ -76,6 +82,7 @@ public class ApplicationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "任务未开放");
         }
         boolean challenge = "CHALLENGE".equals(task.getPostingMode());
+        boolean team = "TEAM".equals(task.getRoleType());
         if (challenge) {
             if (!"OPEN".equals(task.getChallengeStatus()) && task.getChallengeStatus() != null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "揭榜已结束，无法再提交方案");
@@ -83,6 +90,24 @@ public class ApplicationService {
             if (task.getBidDeadline() != null && task.getBidDeadline().isBefore(LocalDateTime.now())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "已过揭榜截止时间");
             }
+        }
+        long filled = projects.countByTaskIdAndStatusNot(taskId, "TERMINATED");
+        if (!challenge && filled >= task.getQuota()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "名额已满");
+        }
+        TaskPosition position = null;
+        if (team) {
+            if (positionId == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请选择要申请的岗位");
+            }
+            position = taskPositions.findByIdAndTaskId(positionId, taskId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "岗位不存在"));
+            long positionFilled = projects.countByPositionIdAndStatusNot(position.getId(), "TERMINATED");
+            if (positionFilled >= position.getQuota()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "该岗位名额已满");
+            }
+        } else if (positionId != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅项目类型需要选择岗位");
         }
         if (applications.findByTaskIdAndStudentId(taskId, student.getId()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, challenge ? "每个揭榜只能提交一次方案" : "每个任务只能投递一次");
@@ -101,6 +126,7 @@ public class ApplicationService {
         }
         TaskApplication application = new TaskApplication();
         application.setTask(task);
+        application.setPosition(position);
         application.setStudent(studentEntity);
         application.setProposalMd(text);
         if (hasFile) {
@@ -187,6 +213,7 @@ public class ApplicationService {
                     "ENROLL:" + project.id());
             notifyStudent(application, "申请已通过", "你申请的「" + application.getTask().getTitle() + "」已通过，可进入项目协作。");
             audit.record(publisher.getId(), "APPLICATION", application.getId(), "ACCEPT", null);
+            closeIfQuotaFull(application.getTask(), application, blank(request.note()), publisher.getId());
         } else if ("REJECT".equals(request.decision())) {
             application.setStatus("REJECTED");
             notifyStudent(application, "申请未通过", "你申请的「" + application.getTask().getTitle() + "」未通过。");
@@ -264,27 +291,48 @@ public class ApplicationService {
         notifyStudent(application, "揭榜通过", "你提交的「" + task.getTitle() + "」方案已中选，可进入项目协作。");
         audit.record(publisher.getId(), "APPLICATION", application.getId(), "AWARD", note);
 
+        closeIfQuotaFull(task, application, note, publisher.getId());
+        if (!"CLOSED".equals(task.getStatus())) {
+            task.setChallengeStatus("OPEN");
+            tasks.save(task);
+        } else {
+            task.setChallengeStatus("AWARDED");
+            tasks.save(task);
+        }
+        return toResponse(application);
+    }
+
+    /** 岗位或任务名额满时拒其余待审；全满则关榜。 */
+    private void closeIfQuotaFull(Task task, TaskApplication accepted, String note, Long publisherId) {
+        TaskPosition position = accepted.getPosition();
+        if (position != null) {
+            long positionFilled = projects.countByPositionIdAndStatusNot(position.getId(), "TERMINATED");
+            if (positionFilled >= position.getQuota()) {
+                for (TaskApplication other : applications.findByPositionIdAndStatus(position.getId(), "SUBMITTED")) {
+                    if (other.getId().equals(accepted.getId())) {
+                        continue;
+                    }
+                    other.setStatus("REJECTED");
+                    other.setReviewNote(note == null ? "该岗位名额已满" : "该岗位名额已满。" + note);
+                    notifyStudent(other, "申请未通过", "「" + task.getTitle() + "」岗位「" + position.getTitle() + "」名额已满。");
+                    audit.record(publisherId, "APPLICATION", other.getId(), "REJECT", "position-full");
+                }
+            }
+        }
         long filled = projects.countByTaskIdAndStatusNot(task.getId(), "TERMINATED");
         if (filled >= task.getQuota()) {
             for (TaskApplication other : applications.findByTaskIdOrderByIdAsc(task.getId())) {
-                if (other.getId().equals(application.getId())) {
-                    continue;
-                }
-                if (!"SUBMITTED".equals(other.getStatus())) {
+                if (other.getId().equals(accepted.getId()) || !"SUBMITTED".equals(other.getStatus())) {
                     continue;
                 }
                 other.setStatus("REJECTED");
-                other.setReviewNote(note == null ? "名额已满，本次未中选" : "名额已满，本次未中选。" + note);
-                notifyStudent(other, "揭榜未中选", "「" + task.getTitle() + "」名额已满，本次未中选。");
-                audit.record(publisher.getId(), "APPLICATION", other.getId(), "REJECT", "challenge-full");
+                other.setReviewNote(note == null ? "名额已满" : "名额已满。" + note);
+                notifyStudent(other, "申请未通过", "「" + task.getTitle() + "」名额已满。");
+                audit.record(publisherId, "APPLICATION", other.getId(), "REJECT", "task-full");
             }
-            task.setChallengeStatus("AWARDED");
             task.setStatus("CLOSED");
-        } else {
-            task.setChallengeStatus("OPEN");
+            tasks.save(task);
         }
-        tasks.save(task);
-        return toResponse(application);
     }
 
     @Transactional
@@ -311,6 +359,7 @@ public class ApplicationService {
         Long projectId = projects.findByApplicationId(application.getId()).map(project -> project.getId()).orElse(null);
         User student = application.getStudent();
         Task task = application.getTask();
+        TaskPosition position = application.getPosition();
         return new ApplicationResponse(
                 application.getId(),
                 task.getId(),
@@ -318,6 +367,9 @@ public class ApplicationService {
                 task.getTechField(),
                 task.getRoleType(),
                 task.getPostingMode(),
+                position == null ? null : position.getId(),
+                position == null ? null : position.getTitle(),
+                position == null ? null : position.getDirection(),
                 student.getId(),
                 student.getDisplayName(),
                 student.getRealName(),
@@ -399,6 +451,9 @@ public class ApplicationService {
             String taskType,
             String taskRoleType,
             String postingMode,
+            Long positionId,
+            String positionTitle,
+            String positionDirection,
             Long studentId,
             String studentName,
             String realName,

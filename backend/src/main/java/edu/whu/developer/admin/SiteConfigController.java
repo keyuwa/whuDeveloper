@@ -18,7 +18,7 @@ public class SiteConfigController {
     public SiteConfigView siteConfig() {
         return new SiteConfigView(
                 settings.getString("tutorial_doc_url", ""),
-                settings.getString("tutorial_banner_text", "系统使用教程请参考平台文档，点击查看完整说明。"));
+                settings.getString("tutorial_banner_text", "查看使用教程"));
     }
 
     public record SiteConfigView(String tutorialDocUrl, String tutorialBannerText) {

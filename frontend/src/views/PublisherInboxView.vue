@@ -224,6 +224,7 @@ function clearTaskFilter() {
         </div>
         <a-typography-paragraph type="secondary">
           {{ item.taskTitle }}
+          <template v-if="item.positionTitle"> · {{ item.positionTitle }}</template>
           <template v-if="isChallenge(item)"> · 科研方案</template>
         </a-typography-paragraph>
         <div v-if="aiLabel(item)" class="ai-box">

@@ -35,12 +35,12 @@ const hasMore = ref(true)
 const totalCount = ref(0)
 const showPcPager = computed(() => !isMobile.value && totalCount.value > PAGE_SIZE)
 const loadError = ref(false)
-const activeModule = ref<'TA' | 'INTERN' | 'RA'>('INTERN')
+const activeModule = ref<'TA' | 'INTERN' | 'RA' | 'TEAM'>('INTERN')
 const filterDrawerVisible = ref(false)
 const loadMoreSentinel = ref<HTMLElement | null>(null)
 let loadMoreObserver: IntersectionObserver | null = null
 const tutorialDocUrl = ref('')
-const tutorialBannerText = ref('系统使用教程请参考平台文档，点击查看完整说明。')
+const tutorialBannerText = ref('查看使用教程')
 const filters = reactive({
   techFields: [] as string[],
   programmingLanguages: [] as string[],
@@ -54,16 +54,20 @@ const filters = reactive({
 const modules = TASK_ROLE_TYPES.map((item) => ({
   value: item.value,
   label: item.label,
+  shortLabel: item.shortLabel,
   blurb:
     item.value === 'TA'
       ? '助教任务：课程支持、答疑与教学协作'
       : item.value === 'RA'
         ? '科研任务：以揭榜形式开放方向，学生提交方案竞标'
-        : '开发任务：产品功能、工程实现与开源贡献',
+        : item.value === 'TEAM'
+          ? '项目：助教 / 开发 / 科研以外的需求；可挂多岗位，岗位由管理员字典维护'
+          : '开发任务：产品功能、工程实现与开源贡献',
 }))
 
 const techOptions = dictOptions('TECH_FIELD')
 const researchOptions = dictOptions('RESEARCH_DIRECTION')
+const teamPositionOptions = dictOptions('TEAM_POSITION')
 const durationOptions = dictOptions('DURATION_RANGE')
 const taScheduleOptions = dictOptions('TA_SCHEDULE')
 const weeklyOptions = dictOptions('WEEKLY_HOURS_RANGE')
@@ -75,6 +79,7 @@ const activeModuleMeta = computed(() => modules.find((item) => item.value === ac
 const isIntern = computed(() => activeModule.value === 'INTERN')
 const isTa = computed(() => activeModule.value === 'TA')
 const isRa = computed(() => activeModule.value === 'RA')
+const isTeam = computed(() => activeModule.value === 'TEAM')
 
 interface FilterSection {
   key: FilterKey
@@ -96,6 +101,9 @@ const filterSections = computed<FilterSection[]>(() => {
       { key: 'weeklyHours', label: '每周投入', options: weeklyOptions.value },
       { key: 'educationLevels', label: '在读身份', options: educationOptions.value },
     ]
+  }
+  if (isTeam.value) {
+    return [{ key: 'techFields', label: '岗位', options: teamPositionOptions.value }]
   }
   return [
     { key: 'techFields', label: '研究方向', options: researchOptions.value },
@@ -143,12 +151,19 @@ const tasks = computed(() => {
       ) {
         return false
       }
+    } else if (isTeam.value) {
+      if (filters.techFields.length) {
+        const directions = (task.positions || []).map((item) => item.direction || item.title)
+        const hit = directions.some((dir) => filters.techFields.includes(dir)) || filters.techFields.includes(task.techField)
+        if (!hit) return false
+      }
     } else {
       if (filters.scheduleTypes.length && !filters.scheduleTypes.includes(task.scheduleType || '')) return false
       if (filters.techFields.length && !filters.techFields.includes(task.techField)) return false
     }
     if (!keyword) return true
-    return `${task.title} ${task.techStack} ${task.programmingLanguages} ${task.publisherName} ${task.techField} ${task.stipendText || ''}`
+    const positionText = (task.positions || []).map((item) => `${item.title} ${item.direction}`).join(' ')
+    return `${task.title} ${task.techStack} ${task.programmingLanguages} ${task.publisherName} ${task.techField} ${task.stipendText || ''} ${positionText}`
       .toLowerCase()
       .includes(keyword)
   })
@@ -170,6 +185,8 @@ const selectedChips = computed<SelectedChip[]>(() => {
     pushMany('scheduleTypes', filters.scheduleTypes, taScheduleOptions.value, '学期')
     pushMany('weeklyHours', filters.weeklyHours, weeklyOptions.value, '每周投入')
     pushMany('educationLevels', filters.educationLevels, educationOptions.value, '在读身份')
+  } else if (isTeam.value) {
+    pushMany('techFields', filters.techFields, teamPositionOptions.value, '岗位')
   } else {
     pushMany('techFields', filters.techFields, researchOptions.value, '研究方向')
   }
@@ -312,7 +329,7 @@ function resetFilters() {
   filters.keyword = ''
 }
 
-async function switchModule(value: 'TA' | 'INTERN' | 'RA') {
+async function switchModule(value: 'TA' | 'INTERN' | 'RA' | 'TEAM') {
   if (activeModule.value === value) return
   activeModule.value = value
   resetFilters()
@@ -377,63 +394,46 @@ onUnmounted(() => {
 
 <template>
   <section class="plaza" :class="{ 'plaza-mobile': isMobile }">
-    <div v-if="!isMobile" class="hero">
-      <div class="hero-main">
-        <div class="hero-copy">
-          <p class="eyebrow">WHU TOP Developer</p>
-          <h1>Welcome to <span>Campus Projects</span></h1>
-          <p class="hero-description">
-            让想法落地，让能力被看见。在<strong>助教</strong>、<strong>开发</strong>、<strong>科研</strong>
-            三个频道里找到适合你的任务。
-          </p>
-          <a href="#opportunities" class="explore">探索开放任务 →</a>
-        </div>
-        <div class="hero-cards" aria-hidden="true">
-          <article class="hero-card">
-            <div class="hero-card-icon ta">&lt;/&gt;</div>
-            <div>
-              <h3>助教 · TA</h3>
-              <p>课程支持与教学协作</p>
-            </div>
-          </article>
-          <article class="hero-card">
-            <div class="hero-card-icon intern">{}</div>
-            <div>
-              <h3>开发 · Intern</h3>
-              <p>产品功能与工程实现</p>
-            </div>
-          </article>
-          <article class="hero-card">
-            <div class="hero-card-icon ra">◆</div>
-            <div>
-              <h3>科研 · RA</h3>
-              <p>揭榜开放方向，方案竞标</p>
-            </div>
-          </article>
+    <section v-if="!isMobile" class="hero" aria-label="平台介绍">
+      <div class="hero-glow" aria-hidden="true" />
+      <div class="hero-grid" aria-hidden="true" />
+      <div class="hero-inner">
+        <p class="hero-eyebrow"><span></span> WHU DEVELOPER · 校园协作社区</p>
+        <h1 class="hero-title">把热爱写进项目，<br />让成长<span>真实发生。</span></h1>
+        <p class="hero-desc">
+          {{ tutorialDocUrl ? tutorialBannerText : '从课堂到开源，从想法到实践。发现适合你的项目，与志同道合的人一起完成。' }}
+        </p>
+        <div class="hero-actions">
+          <a href="#opportunities" class="hero-cta primary">探索开放任务 <span aria-hidden="true">↗</span></a>
+          <a
+            v-if="tutorialDocUrl"
+            class="hero-cta secondary"
+            :href="tutorialDocUrl"
+            target="_blank"
+            rel="noopener"
+          >
+            使用教程
+          </a>
         </div>
       </div>
-      <a
-        v-if="tutorialDocUrl"
-        class="tutorial-banner"
-        :href="tutorialDocUrl"
-        target="_blank"
-        rel="noopener"
-      >
-        <span class="tutorial-kicker">使用教程</span>
-        <span class="tutorial-text">{{ tutorialBannerText }}</span>
-        <span class="tutorial-link">查看文档 ↗</span>
-      </a>
-    </div>
-    <header v-if="!isMobile" id="opportunities" class="page-head">
-      <div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="art-orbit"></div>
+        <div class="art-center"><span>WHU</span><small>IDEAS INTO IMPACT</small></div>
+        <div class="art-card art-teach"><span class="art-symbol">Aa</span><div><strong>助教</strong><small>SHARE KNOWLEDGE</small></div></div>
+        <div class="art-card art-code"><span class="art-symbol">&lt;/&gt;</span><div><strong>开发</strong><small>BUILD SOMETHING</small></div></div>
+        <div class="art-card art-research"><span class="art-symbol">✳</span><div><strong>科研</strong><small>EXPLORE THE UNKNOWN</small></div></div>
+        <div class="art-card art-project"><span class="art-symbol">◇</span><div><strong>项目</strong><small>JOIN THE WORK</small></div></div>
+        <div class="art-caption">四个频道 · 一起创造</div>
+      </div>
+    </section>
+    <header id="opportunities" class="page-head" :class="{ 'page-head-mobile': isMobile }">
+      <div v-if="!isMobile">
         <a-typography-title :heading="4" style="margin: 0">任务广场</a-typography-title>
         <p class="subtitle">先选频道；每个频道使用各自适配的筛选条件。</p>
       </div>
-      <a-typography-text type="secondary">本频道 {{ resultCount }} 个项目</a-typography-text>
+      <p v-else class="mobile-count">{{ resultCount }} 个开放职位</p>
+      <a-typography-text v-if="!isMobile" type="secondary">本频道 {{ resultCount }} 个项目</a-typography-text>
     </header>
-    <div v-else class="mobile-plaza-head">
-      <p class="mobile-count">{{ resultCount }} 个开放职位</p>
-    </div>
 
     <nav class="module-tabs" :class="{ compact: isMobile }" aria-label="任务频道">
       <button
@@ -444,7 +444,7 @@ onUnmounted(() => {
         :class="{ active: activeModule === item.value }"
         @click="switchModule(item.value)"
       >
-        <span class="module-name">{{ item.label }}</span>
+        <span class="module-name">{{ isMobile ? item.shortLabel : item.label }}</span>
         <span v-if="!isMobile" class="module-blurb">{{ item.blurb }}</span>
       </button>
     </nav>
@@ -588,6 +588,9 @@ onUnmounted(() => {
           <p class="job-meta">
             <template v-if="isIntern">{{ task.techField }} · {{ durationLabel(task.durationWeeks) }}</template>
             <template v-else-if="isTa">{{ scheduleLabel(task) }} · {{ task.estimatedHours }}h/周</template>
+            <template v-else-if="isTeam">
+              {{ (task.positions || []).map((item) => item.title).join(' / ') || task.techField }} · 名额 {{ seatLabel(task) }}
+            </template>
             <template v-else>{{ task.techField }} · {{ scheduleLabel(task) }}</template>
           </p>
           <div class="job-foot">
@@ -608,8 +611,10 @@ onUnmounted(() => {
               <th v-if="isIntern">开发周期</th>
               <th v-else-if="isTa">学期</th>
               <th v-else-if="isRa">截止</th>
+              <th v-else-if="isTeam">岗位</th>
               <th v-if="isTa">每周投入</th>
               <th v-else-if="isRa">方向</th>
+              <th v-else-if="isTeam">周期</th>
               <th>名额</th>
             </tr>
           </thead>
@@ -626,6 +631,9 @@ onUnmounted(() => {
                   <span class="title-text">{{ task.title }}</span>
                   <span v-if="!isTa" class="title-meta">
                     <template v-if="isIntern">{{ task.techField }} · {{ task.programmingLanguages }}</template>
+                    <template v-else-if="isTeam">
+                      {{ (task.positions || []).map((item) => `${item.title} ${item.filled}/${item.quota}`).join(' · ') || task.techField }}
+                    </template>
                     <template v-else>{{ task.techField }}</template>
                   </span>
                 </div>
@@ -640,8 +648,12 @@ onUnmounted(() => {
               <td v-else-if="isRa">
                 {{ task.bidDeadline ? task.bidDeadline.replace('T', ' ').slice(0, 16) : '长期' }}
               </td>
+              <td v-else-if="isTeam">
+                {{ (task.positions || []).map((item) => item.title).join(' / ') || task.techField }}
+              </td>
               <td v-if="isTa">{{ task.estimatedHours }} 小时/周</td>
               <td v-else-if="isRa">{{ task.techField }}</td>
+              <td v-else-if="isTeam">{{ durationLabel(task.durationWeeks) }}</td>
               <td>{{ seatLabel(task) }}</td>
             </tr>
           </tbody>
@@ -694,7 +706,7 @@ onUnmounted(() => {
 }
 .module-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 10px;
 }
@@ -738,145 +750,224 @@ onUnmounted(() => {
   font-size: 13px;
 }
 .hero {
+  --hero-ink: #111827;
+  --hero-muted: #6b7280;
+  --hero-line: #eef2f7;
+  --hero-blue: #2563eb;
+  --hero-blue-deep: #1d4ed8;
   position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 22px 24px;
-  border-radius: 16px;
-  color: var(--ink);
-  background:
-    radial-gradient(ellipse at 90% 10%, rgba(79, 70, 229, 0.07), transparent 45%),
-    radial-gradient(ellipse at 0% 100%, rgba(37, 99, 235, 0.06), transparent 40%),
-    #fff;
-  border: 1px solid #eef2f7;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
-}
-.hero-main {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 20px;
+  grid-template-columns: 1.2fr 1fr;
   align-items: center;
+  overflow: hidden;
+  margin-bottom: 14px;
+  padding: 34px 42px;
+  border: 1px solid var(--hero-line);
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at 88% 28%, rgba(37, 99, 235, 0.14), transparent 52%),
+    radial-gradient(ellipse at 8% 92%, rgba(79, 70, 229, 0.08), transparent 46%),
+    linear-gradient(135deg, #ffffff 0%, #f8fbff 48%, #eff6ff 100%);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
+  animation: hero-in .55s ease-out both;
 }
-.hero-copy { position: relative; z-index: 1; min-width: 0; }
-.eyebrow {
+.hero-glow {
+  position: absolute;
+  width: 330px;
+  height: 330px;
+  right: -130px;
+  top: -180px;
+  border: 50px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.hero-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(37, 99, 235, 0.12) 1px, transparent 1px);
+  background-size: 19px 19px;
+  mask-image: linear-gradient(90deg, transparent 35%, black);
+  pointer-events: none;
+}
+.hero-inner { position: relative; z-index: 1; }
+.hero-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  margin-bottom: 18px;
+}
+.hero-eyebrow span {
+  width: 6px;
+  height: 6px;
+  background: var(--hero-blue);
+  border-radius: 50%;
+}
+.hero-title {
+  font-family: "Sora", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: var(--hero-ink);
+  font-size: clamp(27px, 3.2vw, 40px);
+  line-height: 1.45;
+  font-weight: 700;
+  letter-spacing: -0.035em;
   margin: 0;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #6b7280;
+  animation: hero-rise .55s ease-out both;
 }
-.hero h1 {
-  font-family: inherit;
-  font-size: clamp(22px, 3vw, 28px);
-  font-weight: 800;
-  line-height: 1.2;
-  margin: 8px 0 8px;
-  color: #111827;
-  letter-spacing: -0.02em;
-}
-.hero h1 span {
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.hero-description {
-  line-height: 1.65;
-  color: #6b7280;
+.hero-title > span { color: var(--hero-blue-deep); }
+.hero-desc {
+  max-width: 34em;
+  margin-top: 15px;
+  color: var(--hero-muted);
   font-size: 13px;
-  max-width: 36em;
-  margin: 0;
+  line-height: 1.9;
 }
-.hero-description strong { color: #111827; font-weight: 700; }
-.explore {
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 23px;
+}
+.hero-cta {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 8px 14px;
-  border-radius: 8px;
+  gap: 10px;
+  padding: 11px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background .2s, box-shadow .2s, border-color .2s, color .2s;
+}
+.hero-cta.primary {
   background: linear-gradient(135deg, #2563eb, #4f46e5);
   color: #fff;
-  font-weight: 600;
-  font-size: 13px;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22);
 }
-.explore:hover { filter: brightness(1.05); color: #fff; }
-.hero-cards {
+.hero-cta.primary:hover {
+  filter: brightness(1.04);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
+}
+.hero-cta.secondary {
+  border: 1px solid #bfdbfe;
+  color: var(--hero-blue-deep);
+  background: rgba(255, 255, 255, 0.85);
+}
+.hero-cta.secondary:hover {
+  background: #fff;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+.hero-cta:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 3px;
+}
+.hero-art {
+  position: relative;
+  height: 265px;
+  margin-left: 24px;
+}
+.art-orbit {
+  position: absolute;
+  width: 245px;
+  height: 245px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 50%;
+  left: 50%;
+  top: 47%;
+  transform: translate(-50%, -50%);
+}
+.art-orbit::after {
+  content: '';
+  position: absolute;
+  inset: 26px;
+  border: 1px dashed rgba(79, 70, 229, 0.22);
+  border-radius: 50%;
+}
+.art-center {
+  position: absolute;
+  top: 99px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-8deg);
+  width: 130px;
+  height: 102px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-.hero-card {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #f9fafb;
-  border: 1px solid #eef2f7;
-  display: flex;
   align-items: center;
-  gap: 10px;
-}
-.hero-card-icon {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  font-size: 12px;
-  font-weight: 700;
+  justify-content: center;
+  background: linear-gradient(145deg, #2563eb, #4f46e5);
   color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 16px;
+  box-shadow: 0 14px 24px rgba(37, 99, 235, 0.22);
 }
-.hero-card-icon.ta { background: #2563eb; }
-.hero-card-icon.intern { background: #4f46e5; }
-.hero-card-icon.ra { background: #0ea5e9; }
-.hero-card h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  color: #111827;
+.art-center > span {
+  font: 700 28px "Sora", sans-serif;
+  letter-spacing: 2px;
 }
-.hero-card p {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: #6b7280;
+.art-center small {
+  font: 7px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 1px;
+  margin-top: 10px;
+  color: #dbeafe;
 }
-.tutorial-banner {
+.art-card {
+  position: absolute;
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #dbeafe;
-  border-radius: 10px;
-  background: linear-gradient(90deg, #eff6ff 0%, #f8fafc 70%);
-  color: inherit;
-  text-decoration: none;
+  gap: 12px;
+  padding: 14px 17px;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
-.tutorial-banner:hover { border-color: #93c5fd; }
-.tutorial-kicker {
-  flex: none;
-  font-size: 11px;
-  font-weight: 600;
-  color: #1d4ed8;
-  background: #dbeafe;
-  border-radius: 5px;
-  padding: 2px 7px;
+.art-card strong {
+  display: block;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 650;
 }
-.tutorial-text {
-  flex: 1;
-  font-size: 12px;
-  color: #4b5563;
-  line-height: 1.4;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.art-card small {
+  display: block;
+  font: 7px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #94a3b8;
+  margin-top: 5px;
+  letter-spacing: .6px;
+}
+.art-symbol {
+  font: 700 18px "Sora", sans-serif;
+  color: var(--hero-blue);
+}
+.art-teach { top: 8px; left: 0; transform: rotate(-7deg); }
+.art-code { top: 18px; right: -4px; transform: rotate(6deg); }
+.art-research { left: -8px; bottom: 28px; transform: rotate(-4deg); }
+.art-project { right: -8px; bottom: 22px; transform: rotate(5deg); }
+.art-caption {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #64748b;
+  font-size: 10px;
+  letter-spacing: 3px;
   white-space: nowrap;
 }
-.tutorial-link { flex: none; font-size: 12px; color: #2563eb; white-space: nowrap; font-weight: 600; }
+@media (max-width: 1000px) { .hero { padding: 30px; grid-template-columns: 1.2fr .8fr; }.hero-art { transform: scale(.85); transform-origin: center; margin-left: 0; } }
+@media (max-width: 760px) { .hero { grid-template-columns: 1fr; }.hero-art { display: none; } }
+@keyframes hero-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-head-mobile {
+  margin: 8px 0 10px;
+  align-items: center;
+}
 
 .filter-panel {
   margin-bottom: 22px;
@@ -1107,28 +1198,30 @@ onUnmounted(() => {
 }
 
 @media (max-width: 900px) {
-  .module-tabs { grid-template-columns: 1fr; }
+  .module-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-row { grid-template-columns: 1fr; gap: 8px; }
   .filter-label { padding-top: 0; }
-  .hero-main { grid-template-columns: 1fr; }
 }
-@media (max-width: 700px) {
-  .hero { padding: 16px; }
-  .hero-cards { display: none; }
-  .tutorial-text { white-space: normal; }
+@media (prefers-reduced-motion: reduce) {
+  .hero,
+  .hero-title,
+  .hero-desc,
+  .hero-actions,
+  .hero-glow {
+    animation: none !important;
+  }
 }
 .module-tabs.compact {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
   margin-bottom: 12px;
 }
 .module-tabs.compact .module-tab {
-  padding: 10px 8px;
-  border-radius: 12px;
+  padding: 8px 4px;
+  border-radius: 10px;
   text-align: center;
 }
-.module-tabs.compact .module-name { font-size: 13px; }
-.mobile-plaza-head { margin-bottom: 10px; }
+.module-tabs.compact .module-name { font-size: 13px; white-space: nowrap; }
 .mobile-count { margin: 0; color: #6b7280; font-size: 13px; }
 .mobile-filter-entry {
   margin-bottom: 12px;

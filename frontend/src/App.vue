@@ -32,7 +32,12 @@ const pendingApplications = ref(0)
 const drawerVisible = ref(false)
 const notifications = ref<NotificationItem[]>([])
 const loadingNotifications = ref(false)
+const tutorialDocUrl = ref('')
+const tutorialBannerText = ref('查看使用教程')
 const user = computed(() => auth.user)
+const showMobileTutorial = computed(
+  () => isMobile.value && route.path === '/' && Boolean(tutorialDocUrl.value),
+)
 
 const selectedKeys = computed(() => {
   const path = route.path
@@ -272,7 +277,20 @@ function clearAll() {
   })
 }
 
-onMounted(refreshUnread)
+async function loadSiteConfig() {
+  try {
+    const config = await api<{ tutorialDocUrl: string; tutorialBannerText: string }>('/api/v1/site-config')
+    tutorialDocUrl.value = config.tutorialDocUrl || ''
+    if (config.tutorialBannerText) tutorialBannerText.value = config.tutorialBannerText
+  } catch {
+    /* optional */
+  }
+}
+
+onMounted(() => {
+  refreshUnread()
+  void loadSiteConfig()
+})
 watch(() => auth.token, refreshUnread)
 watch(() => route.fullPath, () => {
   if (!drawerVisible.value) refreshUnread()
@@ -380,7 +398,18 @@ function formatTime(value: string) {
 
     <!-- Mobile compact header -->
     <header v-else class="mobile-header">
-      <div class="mobile-title">{{ mobileTitle }}</div>
+      <div class="mobile-header-main">
+        <div class="mobile-title">{{ mobileTitle }}</div>
+        <a
+          v-if="showMobileTutorial"
+          class="mobile-header-tutorial"
+          :href="tutorialDocUrl"
+          target="_blank"
+          rel="noopener"
+        >
+          {{ tutorialBannerText }} ↗
+        </a>
+      </div>
       <div class="mobile-header-actions">
         <template v-if="user">
           <a-badge :count="unread" :max-count="99">
@@ -606,29 +635,53 @@ function formatTime(value: string) {
   top: 0;
   z-index: 40;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  min-height: 52px;
-  padding: 8px 14px;
+  min-height: 0;
+  padding: 8px 14px 6px;
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid #eef2f7;
 }
+.mobile-header-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .mobile-title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 750;
   color: #111827;
+  line-height: 1.2;
 }
 .mobile-header-actions {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex-shrink: 0;
+  margin-top: -2px;
 }
 .mobile-logout {
   color: #6b7280;
   font-weight: 600;
   padding: 0 6px;
+}
+.mobile-header-tutorial {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 1.25;
+  text-decoration: none;
+}
+.mobile-header-tutorial:active {
+  color: #6b7280;
 }
 .page-mobile {
   padding: 12px 12px 24px !important;

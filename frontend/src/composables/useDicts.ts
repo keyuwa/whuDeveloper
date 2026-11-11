@@ -9,6 +9,7 @@ import {
   SUPPORT_LANGUAGES,
   TA_SCHEDULE_OPTIONS,
   RESEARCH_DIRECTIONS,
+  TEAM_POSITIONS,
   TECH_FIELDS,
   WEEKLY_HOURS_OPTIONS,
 } from '../types'
@@ -49,6 +50,8 @@ function fallback(type: string): DictItem[] {
       return TECH_FIELDS.map((value) => ({ dictType: type, value, label: value }))
     case 'RESEARCH_DIRECTION':
       return RESEARCH_DIRECTIONS.map((value) => ({ dictType: type, value, label: value }))
+    case 'TEAM_POSITION':
+      return TEAM_POSITIONS.map((value) => ({ dictType: type, value, label: value }))
     case 'SUPPORT_LANGUAGE':
       return SUPPORT_LANGUAGES.map((value) => ({ dictType: type, value, label: value }))
     case 'PROGRAMMING_LANGUAGE':

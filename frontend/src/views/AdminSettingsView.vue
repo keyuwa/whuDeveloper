@@ -41,7 +41,7 @@ const form = reactive({
   reviewSlaDays: 7,
   escalateSlaDays: 14,
   tutorialDocUrl: '',
-  tutorialBannerText: '系统使用教程请参考平台文档，点击查看完整说明。',
+  tutorialBannerText: '查看使用教程',
   abilityRubricMd: '',
   arkEnabled: false,
   arkApiKey: '',

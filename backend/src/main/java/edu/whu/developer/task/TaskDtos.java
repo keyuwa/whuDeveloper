@@ -1,5 +1,6 @@
 package edu.whu.developer.task;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -7,10 +8,31 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public final class TaskDtos {
 
     private TaskDtos() {
+    }
+
+    public record PositionRequest(
+            Long id,
+            @Size(max = 64) String title,
+            /** 岗位字典值 TEAM_POSITION；为空时用 title */
+            @Size(max = 64) String direction,
+            @NotNull(message = "请填写岗位名额") @Min(1) @Max(200) Integer quota,
+            @Size(max = 2000) String requirement
+    ) {
+    }
+
+    public record PositionView(
+            Long id,
+            String title,
+            String direction,
+            Integer quota,
+            long filled,
+            String requirement
+    ) {
     }
 
     public record TaskRequest(
@@ -37,8 +59,9 @@ public final class TaskDtos {
             String techDocMd,
             @Size(max = 500) String techDocFileUrl,
             @Size(max = 255) String techDocFileName,
-            @NotNull(message = "请填写名额") @Min(1) @Max(50) Integer quota,
-            LocalDateTime bidDeadline
+            @Min(1) @Max(200) Integer quota,
+            LocalDateTime bidDeadline,
+            @Valid List<PositionRequest> positions
     ) {
     }
 
@@ -64,7 +87,8 @@ public final class TaskDtos {
             long totalClosed,
             long totalTa,
             long totalIntern,
-            long totalRa
+            long totalRa,
+            long totalTeam
     ) {
     }
 
@@ -107,7 +131,8 @@ public final class TaskDtos {
             Long myApplicationId,
             String myApplicationStatus,
             Long projectId,
-            boolean shortlisted
+            boolean shortlisted,
+            List<PositionView> positions
     ) {
     }
 }

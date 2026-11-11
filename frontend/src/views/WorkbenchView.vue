@@ -16,12 +16,14 @@ const applications = ref<Application[]>([])
 const shortlists = ref<Task[]>([])
 const loading = ref(false)
 
-function parseRoleTab(value: unknown): 'TA' | 'INTERN' | 'RA' | null {
+function parseRoleTab(value: unknown): 'TA' | 'INTERN' | 'RA' | 'TEAM' | null {
   const normalized = String(value || '').toUpperCase()
-  return normalized === 'TA' || normalized === 'INTERN' || normalized === 'RA' ? normalized : null
+  return normalized === 'TA' || normalized === 'INTERN' || normalized === 'RA' || normalized === 'TEAM'
+    ? normalized
+    : null
 }
 
-const roleTab = ref<'TA' | 'INTERN' | 'RA'>(
+const roleTab = ref<'TA' | 'INTERN' | 'RA' | 'TEAM'>(
   parseRoleTab(route.query.roleType) ||
     parseRoleTab(sessionStorage.getItem(ROLE_STORAGE_KEY)) ||
     'INTERN',
@@ -80,7 +82,7 @@ const pendingApplications = computed(() =>
 )
 
 const roleCounts = computed(() => {
-  const counts = { TA: 0, INTERN: 0, RA: 0 }
+  const counts = { TA: 0, INTERN: 0, RA: 0, TEAM: 0 }
   if (tab.value === 'enrolled') {
     for (const item of activeProjects.value) {
       const role = projectRole(item)
@@ -183,7 +185,7 @@ onMounted(() => {
     <header v-if="!isMobile" class="page-head">
       <div>
         <a-typography-title :heading="4" style="margin: 0">工作台</a-typography-title>
-        <p class="subtitle">已接项目、已投申请与备选收藏，按助教 / 开发 / 科研分栏查看。</p>
+        <p class="subtitle">已接项目、已投申请与备选收藏，按助教 / 开发 / 科研 / 项目分栏查看。</p>
       </div>
       <router-link to="/" class="discover-link">探索新项目 ↗</router-link>
     </header>
@@ -200,7 +202,7 @@ onMounted(() => {
         :class="{ active: roleTab === item.value }"
         @click="roleTab = item.value"
       >
-        <span class="role-name">{{ item.label }}</span>
+        <span class="role-name">{{ isMobile ? item.shortLabel : item.label }}</span>
         <span class="role-count">{{ roleCounts[item.value] }}</span>
       </button>
     </nav>
@@ -268,6 +270,7 @@ onMounted(() => {
               </div>
               <a-typography-title :heading="6" style="margin: 14px 0 10px">{{ item.taskTitle }}</a-typography-title>
               <div class="card-meta">
+                <span v-if="item.positionTitle">岗位 {{ item.positionTitle }}</span>
                 <span>投递于 {{ item.createdAt.replace('T', ' ').slice(0, 16) }}</span>
                 <span v-if="item.reviewNote">审阅：{{ item.reviewNote }}</span>
               </div>
@@ -325,7 +328,7 @@ onMounted(() => {
 .discover-link { color: #2563eb; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .role-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 0 0 12px;
 }
@@ -352,19 +355,36 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 700;
   color: #111827;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .role-tab.active .role-name { color: #1d4ed8; }
 .role-count {
   font-size: 12px;
   color: #6b7280;
   font-weight: 600;
+  flex-shrink: 0;
 }
-.role-tabs.compact { gap: 8px; }
+.role-tabs.compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
 .role-tabs.compact .role-tab {
-  padding: 10px 12px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 4px;
   border-radius: 10px;
+  text-align: center;
 }
-.role-tabs.compact .role-name { font-size: 13px; }
+.role-tabs.compact .role-name { font-size: 13px; white-space: nowrap; }
+.role-tabs.compact .role-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 .task-grid { display: flex; flex-direction: column; gap: 12px; background: transparent; border: 0; border-radius: 0; overflow: visible; }
 .task-card-link + .task-card-link { border-top: 0; }
 .work-card {

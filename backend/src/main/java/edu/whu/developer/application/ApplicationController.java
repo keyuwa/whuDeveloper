@@ -29,8 +29,9 @@ public class ApplicationController {
     public ApplicationResponse submit(
             @PathVariable Long taskId,
             @org.springframework.web.bind.annotation.RequestParam(value = "proposalText", required = false) String proposalText,
+            @org.springframework.web.bind.annotation.RequestParam(value = "positionId", required = false) Long positionId,
             @org.springframework.web.bind.annotation.RequestParam(value = "file", required = false) org.springframework.web.multipart.MultipartFile file) {
-        return applications.submit(taskId, proposalText, file);
+        return applications.submit(taskId, proposalText, positionId, file);
     }
 
     @GetMapping("/tasks/{taskId}/applications")
