@@ -35,7 +35,7 @@ const applicationLabels: Record<string, string> = {
 }
 const isChallenge = computed(() => task.value?.postingMode === 'CHALLENGE' || task.value?.roleType === 'RA')
 const isTeam = computed(() => task.value?.roleType === 'TEAM')
-const selectedPositionId = ref<number | null>(null)
+const selectedPositionId = ref<number | undefined>()
 const challengeOpen = computed(() => {
   if (!task.value || !isChallenge.value) return task.value?.status === 'OPEN'
   if (task.value.status !== 'OPEN') return false
@@ -95,11 +95,11 @@ async function load() {
   await loadDicts()
   proposalFile.value = null
   myApplication.value = null
-  selectedPositionId.value = null
+  selectedPositionId.value = undefined
   task.value = await api<Task>(`/api/v1/tasks/${id.value}`)
   if (task.value.roleType === 'TEAM') {
     const firstOpen = (task.value.positions || []).find((item) => item.filled < item.quota)
-    selectedPositionId.value = firstOpen?.id ?? task.value.positions?.[0]?.id ?? null
+    selectedPositionId.value = firstOpen?.id ?? task.value.positions?.[0]?.id
   }
   if (isStudent.value) {
     const me = await api<User>('/api/v1/me/resume')
