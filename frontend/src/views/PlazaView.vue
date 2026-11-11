@@ -77,7 +77,9 @@ const educationOptions = dictOptions('STUDENT_IDENTITY')
 const languageOptions = dictOptions('PROGRAMMING_LANGUAGE')
 const scheduleLabels = scheduleLabelMap()
 
-const activeModuleMeta = computed(() => modules.find((item) => item.value === activeModule.value) || modules[1])
+const activeModuleMeta = computed(
+  () => modules.value.find((item) => item.value === activeModule.value) || modules.value[1],
+)
 const isIntern = computed(() => activeModule.value === 'INTERN')
 const isTa = computed(() => activeModule.value === 'TA')
 const isRa = computed(() => activeModule.value === 'RA')
