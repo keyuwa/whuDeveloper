@@ -5,13 +5,17 @@ import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
 import { renderMarkdown } from '../markdown'
 
-type SettingsSection = 'ark' | 'rubric' | 'tutorial' | 'sla'
+type SettingsSection = 'ark' | 'rubric' | 'tutorial' | 'plaza' | 'sla'
 
 type SettingsPayload = {
   reviewSlaDays: number
   escalateSlaDays: number
   tutorialDocUrl: string
   tutorialBannerText: string
+  plazaBlurbTa: string
+  plazaBlurbIntern: string
+  plazaBlurbRa: string
+  plazaBlurbTeam: string
   abilityRubricMd: string
   arkEnabled: boolean
   arkApiKeyMasked: string
@@ -25,8 +29,16 @@ const SECTIONS: { key: SettingsSection; label: string; desc: string }[] = [
   { key: 'ark', label: '科研 RA · AI', desc: '揭榜方案可行性初判接入与 Prompt' },
   { key: 'rubric', label: 'WHU Dev 细则', desc: '能力裁定 Markdown 细则' },
   { key: 'tutorial', label: '教程文档', desc: '任务广场教程 Banner' },
+  { key: 'plaza', label: '频道说明', desc: '广场助教 / 开发 / 科研 / 项目简介' },
   { key: 'sla', label: 'SLA', desc: '催办与升级天数' },
 ]
+
+const DEFAULT_PLAZA_BLURBS = {
+  plazaBlurbTa: '助教任务：课程支持、答疑与教学协作',
+  plazaBlurbIntern: '开发任务：产品功能、工程实现与开源贡献',
+  plazaBlurbRa: '科研任务：以揭榜形式开放方向，学生提交方案竞标',
+  plazaBlurbTeam: '项目：运营、标注等协作需求，按岗位报名，一次可招多人',
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -42,6 +54,10 @@ const form = reactive({
   escalateSlaDays: 14,
   tutorialDocUrl: '',
   tutorialBannerText: '查看使用教程',
+  plazaBlurbTa: DEFAULT_PLAZA_BLURBS.plazaBlurbTa,
+  plazaBlurbIntern: DEFAULT_PLAZA_BLURBS.plazaBlurbIntern,
+  plazaBlurbRa: DEFAULT_PLAZA_BLURBS.plazaBlurbRa,
+  plazaBlurbTeam: DEFAULT_PLAZA_BLURBS.plazaBlurbTeam,
   abilityRubricMd: '',
   arkEnabled: false,
   arkApiKey: '',
@@ -52,9 +68,13 @@ const form = reactive({
   raChallengeAiPrompt: '',
 })
 
+function isSettingsSection(value: string): value is SettingsSection {
+  return value === 'ark' || value === 'rubric' || value === 'tutorial' || value === 'plaza' || value === 'sla'
+}
+
 const section = computed<SettingsSection>(() => {
   const raw = String(route.params.section || '').toLowerCase()
-  if (raw === 'ark' || raw === 'rubric' || raw === 'tutorial' || raw === 'sla') return raw
+  if (isSettingsSection(raw)) return raw
   return 'ark'
 })
 
@@ -71,6 +91,10 @@ function applySettings(settings: SettingsPayload) {
   form.escalateSlaDays = settings.escalateSlaDays
   form.tutorialDocUrl = settings.tutorialDocUrl || ''
   form.tutorialBannerText = settings.tutorialBannerText || form.tutorialBannerText
+  form.plazaBlurbTa = settings.plazaBlurbTa || DEFAULT_PLAZA_BLURBS.plazaBlurbTa
+  form.plazaBlurbIntern = settings.plazaBlurbIntern || DEFAULT_PLAZA_BLURBS.plazaBlurbIntern
+  form.plazaBlurbRa = settings.plazaBlurbRa || DEFAULT_PLAZA_BLURBS.plazaBlurbRa
+  form.plazaBlurbTeam = settings.plazaBlurbTeam || DEFAULT_PLAZA_BLURBS.plazaBlurbTeam
   form.abilityRubricMd = settings.abilityRubricMd || ''
   form.arkEnabled = Boolean(settings.arkEnabled)
   form.arkApiKeyMasked = settings.arkApiKeyMasked || ''
@@ -117,6 +141,12 @@ async function saveCurrent() {
       tutorial: {
         tutorialDocUrl: form.tutorialDocUrl,
         tutorialBannerText: form.tutorialBannerText,
+      },
+      plaza: {
+        plazaBlurbTa: form.plazaBlurbTa,
+        plazaBlurbIntern: form.plazaBlurbIntern,
+        plazaBlurbRa: form.plazaBlurbRa,
+        plazaBlurbTeam: form.plazaBlurbTeam,
       },
       sla: {
         reviewSlaDays: form.reviewSlaDays,
@@ -185,7 +215,7 @@ watch(
       return
     }
     const raw = String(value).toLowerCase()
-    if (raw !== 'ark' && raw !== 'rubric' && raw !== 'tutorial' && raw !== 'sla') {
+    if (!isSettingsSection(raw)) {
       router.replace('/admin/settings/ark')
       return
     }
@@ -310,6 +340,26 @@ watch(
             </a-form-item>
             <a-form-item label="Banner 文案">
               <a-input v-model="form.tutorialBannerText" placeholder="提示文案" allow-clear />
+            </a-form-item>
+          </a-form>
+        </template>
+
+        <template v-else-if="section === 'plaza'">
+          <a-typography-paragraph type="secondary">
+            文案显示在任务广场四个频道卡片下方；留空保存时回退为默认说明。
+          </a-typography-paragraph>
+          <a-form :model="form" layout="vertical" style="max-width: 720px">
+            <a-form-item label="助教">
+              <a-input v-model="form.plazaBlurbTa" :max-length="200" show-word-limit allow-clear />
+            </a-form-item>
+            <a-form-item label="开发">
+              <a-input v-model="form.plazaBlurbIntern" :max-length="200" show-word-limit allow-clear />
+            </a-form-item>
+            <a-form-item label="科研">
+              <a-input v-model="form.plazaBlurbRa" :max-length="200" show-word-limit allow-clear />
+            </a-form-item>
+            <a-form-item label="项目">
+              <a-input v-model="form.plazaBlurbTeam" :max-length="200" show-word-limit allow-clear />
             </a-form-item>
           </a-form>
         </template>

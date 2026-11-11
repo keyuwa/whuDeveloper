@@ -41,6 +41,13 @@ const loadMoreSentinel = ref<HTMLElement | null>(null)
 let loadMoreObserver: IntersectionObserver | null = null
 const tutorialDocUrl = ref('')
 const tutorialBannerText = ref('查看使用教程')
+const DEFAULT_MODULE_BLURBS: Record<string, string> = {
+  TA: '助教任务：课程支持、答疑与教学协作',
+  INTERN: '开发任务：产品功能、工程实现与开源贡献',
+  RA: '科研任务：以揭榜形式开放方向，学生提交方案竞标',
+  TEAM: '项目：运营、标注等协作需求，按岗位报名，一次可招多人',
+}
+const moduleBlurbs = ref<Record<string, string>>({ ...DEFAULT_MODULE_BLURBS })
 const filters = reactive({
   techFields: [] as string[],
   programmingLanguages: [] as string[],
@@ -51,19 +58,14 @@ const filters = reactive({
   keyword: '',
 })
 
-const modules = TASK_ROLE_TYPES.map((item) => ({
-  value: item.value,
-  label: item.label,
-  shortLabel: item.shortLabel,
-  blurb:
-    item.value === 'TA'
-      ? '助教任务：课程支持、答疑与教学协作'
-      : item.value === 'RA'
-        ? '科研任务：以揭榜形式开放方向，学生提交方案竞标'
-        : item.value === 'TEAM'
-          ? '项目：助教 / 开发 / 科研以外的需求；可挂多岗位，岗位由管理员字典维护'
-          : '开发任务：产品功能、工程实现与开源贡献',
-}))
+const modules = computed(() =>
+  TASK_ROLE_TYPES.map((item) => ({
+    value: item.value,
+    label: item.label,
+    shortLabel: item.shortLabel,
+    blurb: moduleBlurbs.value[item.value] || DEFAULT_MODULE_BLURBS[item.value] || '',
+  })),
+)
 
 const techOptions = dictOptions('TECH_FIELD')
 const researchOptions = dictOptions('RESEARCH_DIRECTION')
@@ -373,9 +375,22 @@ async function openPublisherChat(task: Task, event: Event) {
 
 async function loadSiteConfig() {
   try {
-    const config = await api<{ tutorialDocUrl: string; tutorialBannerText: string }>('/api/v1/site-config')
+    const config = await api<{
+      tutorialDocUrl: string
+      tutorialBannerText: string
+      plazaBlurbTa?: string
+      plazaBlurbIntern?: string
+      plazaBlurbRa?: string
+      plazaBlurbTeam?: string
+    }>('/api/v1/site-config')
     tutorialDocUrl.value = config.tutorialDocUrl || ''
     if (config.tutorialBannerText) tutorialBannerText.value = config.tutorialBannerText
+    moduleBlurbs.value = {
+      TA: config.plazaBlurbTa || DEFAULT_MODULE_BLURBS.TA,
+      INTERN: config.plazaBlurbIntern || DEFAULT_MODULE_BLURBS.INTERN,
+      RA: config.plazaBlurbRa || DEFAULT_MODULE_BLURBS.RA,
+      TEAM: config.plazaBlurbTeam || DEFAULT_MODULE_BLURBS.TEAM,
+    }
   } catch {
     /* banner optional */
   }

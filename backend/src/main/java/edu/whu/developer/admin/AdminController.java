@@ -188,6 +188,29 @@ public class AdminController {
         return currentSettings();
     }
 
+    @PutMapping("/settings/plaza")
+    public SettingsView updatePlazaSettings(@Valid @RequestBody PlazaSettingsRequest request) {
+        AuthUser admin = AuthSupport.requireRole(Role.ADMIN);
+        settings.put(
+                "plaza_blurb_ta",
+                blankToDefault(request.plazaBlurbTa(), SiteConfigController.DEFAULT_BLURB_TA));
+        settings.put(
+                "plaza_blurb_intern",
+                blankToDefault(request.plazaBlurbIntern(), SiteConfigController.DEFAULT_BLURB_INTERN));
+        settings.put(
+                "plaza_blurb_ra",
+                blankToDefault(request.plazaBlurbRa(), SiteConfigController.DEFAULT_BLURB_RA));
+        settings.put(
+                "plaza_blurb_team",
+                blankToDefault(request.plazaBlurbTeam(), SiteConfigController.DEFAULT_BLURB_TEAM));
+        audit.record(admin.getId(), "SETTINGS", 0L, "UPDATE", "plaza");
+        return currentSettings();
+    }
+
+    private static String blankToDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
     @PutMapping("/settings/sla")
     public SettingsView updateSlaSettings(@Valid @RequestBody SlaSettingsRequest request) {
         AuthUser admin = AuthSupport.requireRole(Role.ADMIN);
@@ -212,6 +235,10 @@ public class AdminController {
                 settings.getInt("escalate_sla_days", 14),
                 settings.getString("tutorial_doc_url", ""),
                 settings.getString("tutorial_banner_text", "查看使用教程"),
+                settings.getString("plaza_blurb_ta", SiteConfigController.DEFAULT_BLURB_TA),
+                settings.getString("plaza_blurb_intern", SiteConfigController.DEFAULT_BLURB_INTERN),
+                settings.getString("plaza_blurb_ra", SiteConfigController.DEFAULT_BLURB_RA),
+                settings.getString("plaza_blurb_team", SiteConfigController.DEFAULT_BLURB_TEAM),
                 settings.getString("ability_rubric_md", ""),
                 settings.getBoolean("ark_enabled", false),
                 maskSecret(apiKey),
@@ -283,6 +310,14 @@ public class AdminController {
     ) {
     }
 
+    public record PlazaSettingsRequest(
+            @Size(max = 200) String plazaBlurbTa,
+            @Size(max = 200) String plazaBlurbIntern,
+            @Size(max = 200) String plazaBlurbRa,
+            @Size(max = 200) String plazaBlurbTeam
+    ) {
+    }
+
     public record SlaSettingsRequest(
             @NotNull @Min(0) @Max(60) Integer reviewSlaDays,
             @NotNull @Min(0) @Max(120) Integer escalateSlaDays
@@ -294,6 +329,10 @@ public class AdminController {
             int escalateSlaDays,
             String tutorialDocUrl,
             String tutorialBannerText,
+            String plazaBlurbTa,
+            String plazaBlurbIntern,
+            String plazaBlurbRa,
+            String plazaBlurbTeam,
             String abilityRubricMd,
             boolean arkEnabled,
             String arkApiKeyMasked,

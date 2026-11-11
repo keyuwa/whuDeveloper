@@ -377,9 +377,9 @@ async function save(publish: boolean) {
       v-if="isTeam"
       type="info"
       style="margin-bottom: 16px"
-      title="项目 · 一任务多岗位"
+      title="项目 · 可挂多个岗位"
     >
-      助教 / 开发 / 科研以外的需求放这里。可挂多个岗位（字典维护），各岗位独立名额，适合数据集、运营等场景。
+      不适合归入助教、开发、科研时用这里。可一次发布多个岗位（如研发、运营），学生按岗位报名，各岗位名额独立。
     </a-alert>
     <a-alert
       v-if="isMobile"
