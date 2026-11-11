@@ -23,7 +23,7 @@ type SettingsPayload = {
 
 const SECTIONS: { key: SettingsSection; label: string; desc: string }[] = [
   { key: 'ark', label: '科研 RA · AI', desc: '揭榜方案可行性初判接入与 Prompt' },
-  { key: 'rubric', label: 'Top Dev 细则', desc: '能力裁定 Markdown 细则' },
+  { key: 'rubric', label: 'WHU Dev 细则', desc: '能力裁定 Markdown 细则' },
   { key: 'tutorial', label: '教程文档', desc: '任务广场教程 Banner' },
   { key: 'sla', label: 'SLA', desc: '催办与升级天数' },
 ]
@@ -282,7 +282,7 @@ watch(
 
         <template v-else-if="section === 'rubric'">
           <a-typography-paragraph type="secondary">
-            支持 Markdown。保存后在「Top Dev → 查看裁定细则」以排版模式展示；留空则回退内置默认文案。
+            支持 Markdown。保存后在「WHU Dev → 查看裁定细则」以排版模式展示；留空则回退内置默认文案。
           </a-typography-paragraph>
           <div class="rubric-toolbar">
             <a-radio-group v-model="preview" type="button" size="small">

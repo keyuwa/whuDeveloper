@@ -28,9 +28,9 @@ onMounted(async () => {
     <header class="page-head">
       <div>
         <h1 class="page-title">等级评定细则</h1>
-        <p class="subtitle">一期预览标准：LV0–LV5 申请与裁定将在二期开放，当前 Top Dev 仅展示积分。</p>
+        <p class="subtitle">一期预览标准：LV0–LV5 申请与裁定将在二期开放，当前 WHU Dev 仅展示积分。</p>
       </div>
-      <a-button type="outline" @click="router.push('/ability')">返回 Top Dev</a-button>
+      <a-button type="outline" @click="router.push('/ability')">返回 WHU Dev</a-button>
     </header>
     <a-spin :loading="loading" style="width: 100%">
       <article class="rubric-card md-body" v-html="html" />

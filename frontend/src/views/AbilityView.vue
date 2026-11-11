@@ -47,7 +47,7 @@ onMounted(() => {
   <section class="ability-page">
     <header class="page-head">
       <div>
-        <h1 class="page-title">Top Dev</h1>
+        <h1 class="page-title">WHU Dev</h1>
         <p class="subtitle">一期先展示协作积分与排行。平台已规划 LV 等级评定，二期开放申请与裁定。</p>
       </div>
     </header>
@@ -100,7 +100,7 @@ onMounted(() => {
       <section class="block roadmap">
         <h2 class="block-title">等级评定（二期）</h2>
         <p class="block-desc">
-          Top Dev 将提供 LV0–LV5 能力等级（含见习 / 管理轨）。等级不由积分自动决定，需对照细则申请，由管理员或资深同学裁定。一期仅预告标准，申请入口二期开放。
+          WHU Dev 将提供 LV0–LV5 能力等级（含见习 / 管理轨）。等级不由积分自动决定，需对照细则申请，由管理员或资深同学裁定。一期仅预告标准，申请入口二期开放。
         </p>
         <a-button type="outline" @click="router.push('/ability/rubric')">预览评定细则</a-button>
       </section>

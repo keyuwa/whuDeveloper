@@ -60,7 +60,7 @@ const selectedKeys = computed(() => {
 const studentMenus = [
   { key: '/', label: '任务广场' },
   { key: '/me/workbench', label: '工作台' },
-  { key: '/ability', label: 'Top Dev' },
+  { key: '/ability', label: 'WHU Dev' },
   { key: '/messages', label: '私信' },
 ]
 const publisherMenus = computed(() => [
@@ -70,12 +70,12 @@ const publisherMenus = computed(() => [
     key: '/publisher/inbox',
     label: pendingApplications.value > 0 ? `审阅 (${pendingApplications.value})` : '审阅',
   },
-  { key: '/ability', label: 'Top Dev' },
+  { key: '/ability', label: 'WHU Dev' },
   { key: '/messages', label: '私信' },
 ])
 const adminMenus = [
   { key: '/', label: '任务广场' },
-  { key: '/ability', label: 'Top Dev' },
+  { key: '/ability', label: 'WHU Dev' },
   { key: '/admin/users', label: '用户' },
   { key: '/admin/tasks', label: '任务' },
   { key: '/admin/dicts', label: '字典' },
@@ -84,7 +84,7 @@ const adminMenus = [
 ]
 const guestMenus = [
   { key: '/', label: '任务广场' },
-  { key: '/ability', label: 'Top Dev' },
+  { key: '/ability', label: 'WHU Dev' },
 ]
 
 const menus = computed(() => {
@@ -96,7 +96,7 @@ const menus = computed(() => {
 
 const studentTabs: TabItem[] = [
   { key: '/', label: '职位', icon: 'jobs', match: (path) => path === '/' },
-  { key: '/ability', label: 'Top Dev', icon: 'topdev', match: (path) => path.startsWith('/ability') },
+  { key: '/ability', label: 'WHU Dev', icon: 'topdev', match: (path) => path.startsWith('/ability') },
   {
     key: '/me/workbench',
     label: '工作台',
@@ -126,7 +126,7 @@ const publisherTabs = computed<TabItem[]>(() => [
 
 const guestTabs: TabItem[] = [
   { key: '/', label: '职位', icon: 'jobs', match: (path) => path === '/' },
-  { key: '/ability', label: 'Top Dev', icon: 'topdev', match: (path) => path.startsWith('/ability') },
+  { key: '/ability', label: 'WHU Dev', icon: 'topdev', match: (path) => path.startsWith('/ability') },
   { key: '/auth/login', label: '登录', icon: 'login', match: (path) => path.startsWith('/auth') },
 ]
 
@@ -170,9 +170,9 @@ const mobileTitle = computed(() => {
   if (path === '/me' || path.startsWith('/me/resume')) return '我的'
   if (path.startsWith('/publisher/tasks')) return '我的任务'
   if (path.startsWith('/publisher/inbox')) return '审阅'
-  if (path.startsWith('/ability')) return 'Top Dev'
+  if (path.startsWith('/ability')) return 'WHU Dev'
   if (path.startsWith('/tasks/')) return '职位详情'
-  return 'WHU TOP'
+  return 'WHU Dev'
 })
 
 async function refreshPendingApplications() {
@@ -346,7 +346,7 @@ function formatTime(value: string) {
           <span class="brand-mark">WHU</span>
           <span>
             <div class="brand-title"><span class="brand-accent">TOP</span> Developer</div>
-            <div class="brand-sub">WHUDEV</div>
+            <div class="brand-sub">WHU Dev</div>
           </span>
         </router-link>
 
