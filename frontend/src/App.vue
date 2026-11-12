@@ -415,7 +415,7 @@ function formatTime(value: string) {
             }}
           </a-tag>
           <span style="font-size: 13px; color: var(--color-text-2)">{{ user.displayName }}</span>
-          <a-badge :count="unread" :max-count="99">
+          <a-badge class="header-notify-badge" :count="unread" :max-count="99">
             <a-button type="text" shape="circle" @click="openNotifications">
               <icon-notification />
             </a-button>
@@ -437,7 +437,7 @@ function formatTime(value: string) {
         </div>
         <div class="mobile-header-actions">
           <template v-if="user">
-            <a-badge :count="unread" :max-count="99">
+            <a-badge class="header-notify-badge" :count="unread" :max-count="99">
               <a-button type="text" shape="circle" size="small" @click="openNotifications">
                 <icon-notification />
               </a-button>
@@ -703,6 +703,7 @@ function formatTime(value: string) {
   gap: 4px;
   flex-shrink: 0;
   height: 32px;
+  padding-right: 2px;
 }
 .mobile-header-actions :deep(.arco-badge) {
   line-height: 1;
@@ -710,6 +711,20 @@ function formatTime(value: string) {
 .mobile-header-actions :deep(.arco-btn) {
   width: 32px;
   height: 32px;
+}
+.header-notify-badge :deep(.arco-badge-number),
+.header-notify-badge :deep(.arco-badge-dot) {
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  font-size: 10px;
+  line-height: 14px;
+  transform: translate(35%, -35%);
+  box-shadow: 0 0 0 1px #fff;
+}
+.header-actions .header-notify-badge :deep(.arco-badge-number),
+.header-actions .header-notify-badge :deep(.arco-badge-dot) {
+  transform: translate(40%, -30%);
 }
 .mobile-logout {
   color: #6b7280;
