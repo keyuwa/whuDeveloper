@@ -341,7 +341,7 @@ watch(
 
         <template v-else-if="section === 'tutorial'">
           <a-typography-paragraph type="secondary">
-            学生与发布方看到各自的教程链接；未登录访客默认看学生教程。对应链接为空则不展示入口。
+            学生与发布方看到各自的教程链接；未登录访客默认看学生教程。PC 首页固定显示「使用教程」按钮，入口文案用于手机端提示条。
           </a-typography-paragraph>
           <a-form :model="form" layout="vertical" style="max-width: 640px">
             <a-form-item label="学生教程链接">
@@ -350,7 +350,7 @@ watch(
             <a-form-item label="发布方教程链接">
               <a-input v-model="form.tutorialDocUrlPublisher" placeholder="例如飞书 Wiki 链接" allow-clear />
             </a-form-item>
-            <a-form-item label="入口文案">
+            <a-form-item label="手机端入口文案">
               <a-input v-model="form.tutorialBannerText" placeholder="提示文案" allow-clear />
             </a-form-item>
           </a-form>

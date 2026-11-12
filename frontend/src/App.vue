@@ -6,6 +6,7 @@ import { IconDelete, IconNotification } from '@arco-design/web-vue/es/icon'
 import { api } from './api'
 import { auth, logout } from './auth'
 import { provideDevice } from './composables/useDevice'
+import { readCachedSiteConfig, writeCachedSiteConfig } from './siteConfigCache'
 
 interface NotificationItem {
   id: number
@@ -32,9 +33,10 @@ const pendingApplications = ref(0)
 const drawerVisible = ref(false)
 const notifications = ref<NotificationItem[]>([])
 const loadingNotifications = ref(false)
-const tutorialDocUrlStudent = ref('')
-const tutorialDocUrlPublisher = ref('')
-const tutorialBannerText = ref('查看使用教程')
+const cachedSite = readCachedSiteConfig()
+const tutorialDocUrlStudent = ref(cachedSite?.tutorialDocUrlStudent || '')
+const tutorialDocUrlPublisher = ref(cachedSite?.tutorialDocUrlPublisher || '')
+const tutorialBannerText = ref(cachedSite?.tutorialBannerText || '查看使用教程')
 const user = computed(() => auth.user)
 const tutorialDocUrl = computed(() => {
   if (user.value?.role === 'PUBLISHER') return tutorialDocUrlPublisher.value
@@ -298,9 +300,17 @@ async function loadSiteConfig() {
       tutorialDocUrl?: string
       tutorialBannerText: string
     }>('/api/v1/site-config')
-    tutorialDocUrlStudent.value = config.tutorialDocUrlStudent || config.tutorialDocUrl || ''
-    tutorialDocUrlPublisher.value = config.tutorialDocUrlPublisher || ''
-    tutorialBannerText.value = config.tutorialBannerText?.trim() || '查看使用教程'
+    const studentUrl = config.tutorialDocUrlStudent || config.tutorialDocUrl || ''
+    const publisherUrl = config.tutorialDocUrlPublisher || ''
+    const bannerText = config.tutorialBannerText?.trim() || '查看使用教程'
+    tutorialDocUrlStudent.value = studentUrl
+    tutorialDocUrlPublisher.value = publisherUrl
+    tutorialBannerText.value = bannerText
+    writeCachedSiteConfig({
+      tutorialDocUrlStudent: studentUrl,
+      tutorialDocUrlPublisher: publisherUrl,
+      tutorialBannerText: bannerText,
+    })
   } catch {
     /* optional */
   }

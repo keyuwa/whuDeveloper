@@ -6,6 +6,7 @@ import { api } from '../api'
 import { auth } from '../auth'
 import { useIsMobile } from '../composables/useDevice'
 import { loadDicts, dictOptions, scheduleLabelMap } from '../composables/useDicts'
+import { readCachedSiteConfig, writeCachedSiteConfig } from '../siteConfigCache'
 import { TASK_ROLE_LABEL, TASK_ROLE_TYPES, type Task, type TaskPage } from '../types'
 
 const isMobile = useIsMobile()
@@ -39,13 +40,14 @@ const activeModule = ref<'TA' | 'INTERN' | 'RA' | 'TEAM'>('INTERN')
 const filterDrawerVisible = ref(false)
 const loadMoreSentinel = ref<HTMLElement | null>(null)
 let loadMoreObserver: IntersectionObserver | null = null
-const tutorialDocUrlStudent = ref('')
-const tutorialDocUrlPublisher = ref('')
-const tutorialBannerText = ref('查看使用教程')
+const cachedSite = readCachedSiteConfig()
+const tutorialDocUrlStudent = ref(cachedSite?.tutorialDocUrlStudent || '')
+const tutorialDocUrlPublisher = ref(cachedSite?.tutorialDocUrlPublisher || '')
 const tutorialDocUrl = computed(() => {
   if (auth.user?.role === 'PUBLISHER') return tutorialDocUrlPublisher.value
   return tutorialDocUrlStudent.value
 })
+const HERO_DESC = '从课堂到开源，从想法到实践。发现适合你的项目，与志同道合的人一起完成。'
 const DEFAULT_MODULE_BLURBS: Record<string, string> = {
   TA: '助教任务：课程支持、答疑与教学协作',
   INTERN: '开发任务：产品功能、工程实现与开源贡献',
@@ -393,9 +395,15 @@ async function loadSiteConfig() {
       plazaBlurbRa?: string
       plazaBlurbTeam?: string
     }>('/api/v1/site-config')
-    tutorialDocUrlStudent.value = config.tutorialDocUrlStudent || config.tutorialDocUrl || ''
-    tutorialDocUrlPublisher.value = config.tutorialDocUrlPublisher || ''
-    tutorialBannerText.value = config.tutorialBannerText?.trim() || '查看使用教程'
+    const studentUrl = config.tutorialDocUrlStudent || config.tutorialDocUrl || ''
+    const publisherUrl = config.tutorialDocUrlPublisher || ''
+    tutorialDocUrlStudent.value = studentUrl
+    tutorialDocUrlPublisher.value = publisherUrl
+    writeCachedSiteConfig({
+      tutorialDocUrlStudent: studentUrl,
+      tutorialDocUrlPublisher: publisherUrl,
+      tutorialBannerText: config.tutorialBannerText?.trim() || '查看使用教程',
+    })
     moduleBlurbs.value = {
       TA: config.plazaBlurbTa || DEFAULT_MODULE_BLURBS.TA,
       INTERN: config.plazaBlurbIntern || DEFAULT_MODULE_BLURBS.INTERN,
@@ -403,7 +411,7 @@ async function loadSiteConfig() {
       TEAM: config.plazaBlurbTeam || DEFAULT_MODULE_BLURBS.TEAM,
     }
   } catch {
-    /* banner optional */
+    /* optional */
   }
 }
 
@@ -426,9 +434,7 @@ onUnmounted(() => {
       <div class="hero-inner">
         <p class="hero-eyebrow"><span></span> WHU DEVELOPER · 校园协作社区</p>
         <h1 class="hero-title">把热爱写进项目，<br />让成长<span>真实发生。</span></h1>
-        <p class="hero-desc">
-          {{ tutorialDocUrl ? tutorialBannerText : '从课堂到开源，从想法到实践。发现适合你的项目，与志同道合的人一起完成。' }}
-        </p>
+        <p class="hero-desc">{{ HERO_DESC }}</p>
         <div class="hero-actions">
           <a href="#opportunities" class="hero-cta primary">探索开放任务 <span aria-hidden="true">↗</span></a>
           <a
