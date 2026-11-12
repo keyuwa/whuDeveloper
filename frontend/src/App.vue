@@ -141,9 +141,17 @@ const mobileTabs = computed(() => {
   if (user.value?.role === 'ADMIN') {
     return [
       { key: '/', label: '广场', icon: 'jobs' as const, match: (path: string) => path === '/' },
-      { key: '/admin/tasks', label: '任务', icon: 'tasks' as const, match: (path: string) => path.startsWith('/admin/tasks') },
+      { key: '/admin/dicts', label: '字典', icon: 'tasks' as const, match: (path: string) => path.startsWith('/admin/dicts') },
       { key: '/admin/users', label: '用户', icon: 'users' as const, match: (path: string) => path.startsWith('/admin/users') },
-      { key: '/admin/settings', label: '设置', icon: 'settings' as const, match: (path: string) => path.startsWith('/admin/') },
+      {
+        key: '/admin/settings',
+        label: '设置',
+        icon: 'settings' as const,
+        match: (path: string) =>
+          path.startsWith('/admin/settings') ||
+          path.startsWith('/admin/tasks') ||
+          path.startsWith('/admin/reminders'),
+      },
     ]
   }
   return guestTabs
@@ -285,13 +293,14 @@ function clearAll() {
 async function loadSiteConfig() {
   try {
     const config = await api<{
-      tutorialDocUrlStudent: string
-      tutorialDocUrlPublisher: string
+      tutorialDocUrlStudent?: string
+      tutorialDocUrlPublisher?: string
+      tutorialDocUrl?: string
       tutorialBannerText: string
     }>('/api/v1/site-config')
-    tutorialDocUrlStudent.value = config.tutorialDocUrlStudent || ''
+    tutorialDocUrlStudent.value = config.tutorialDocUrlStudent || config.tutorialDocUrl || ''
     tutorialDocUrlPublisher.value = config.tutorialDocUrlPublisher || ''
-    if (config.tutorialBannerText) tutorialBannerText.value = config.tutorialBannerText
+    tutorialBannerText.value = config.tutorialBannerText?.trim() || '查看使用教程'
   } catch {
     /* optional */
   }
@@ -302,9 +311,13 @@ onMounted(() => {
   void loadSiteConfig()
 })
 watch(() => auth.token, refreshUnread)
-watch(() => route.fullPath, () => {
-  if (!drawerVisible.value) refreshUnread()
-})
+watch(
+  () => route.path,
+  (path) => {
+    if (path === '/') void loadSiteConfig()
+    if (!drawerVisible.value) refreshUnread()
+  },
+)
 watch(isMobile, (mobile) => {
   document.documentElement.classList.toggle('is-mobile', mobile)
 })
@@ -407,31 +420,33 @@ function formatTime(value: string) {
     </a-layout-header>
 
     <!-- Mobile compact header -->
-    <header v-else class="mobile-header">
-      <div class="mobile-header-main">
-        <div class="mobile-title">{{ mobileTitle }}</div>
-        <a
-          v-if="showMobileTutorial"
-          class="mobile-header-tutorial"
-          :href="tutorialDocUrl"
-          target="_blank"
-          rel="noopener"
-        >
-          {{ tutorialBannerText }} ↗
-        </a>
-      </div>
-      <div class="mobile-header-actions">
-        <template v-if="user">
-          <a-badge :count="unread" :max-count="99">
-            <a-button type="text" shape="circle" size="small" @click="openNotifications">
-              <icon-notification />
-            </a-button>
-          </a-badge>
-          <a-button type="text" size="small" class="mobile-logout" @click="onLogout">退出</a-button>
-        </template>
-        <a-button v-else type="text" size="small" @click="router.push('/auth/login')">登录</a-button>
-      </div>
-    </header>
+    <template v-else>
+      <header class="mobile-header">
+        <div class="mobile-header-main">
+          <div class="mobile-title">{{ mobileTitle }}</div>
+        </div>
+        <div class="mobile-header-actions">
+          <template v-if="user">
+            <a-badge :count="unread" :max-count="99">
+              <a-button type="text" shape="circle" size="small" @click="openNotifications">
+                <icon-notification />
+              </a-button>
+            </a-badge>
+            <a-button type="text" size="small" class="mobile-logout" @click="onLogout">退出</a-button>
+          </template>
+          <a-button v-else type="text" size="small" @click="router.push('/auth/login')">登录</a-button>
+        </div>
+      </header>
+      <a
+        v-if="showMobileTutorial"
+        class="mobile-tutorial-hint"
+        :href="tutorialDocUrl"
+        target="_blank"
+        rel="noopener"
+      >
+        {{ tutorialBannerText }}
+      </a>
+    </template>
 
     <a-layout-content>
       <div class="page" :class="{ 'page-mobile': isMobile }">
@@ -465,14 +480,21 @@ function formatTime(value: string) {
               stroke-linejoin="round"
             />
           </svg>
-          <!-- Top Dev / 能力 -->
+          <!-- WHU Dev / 排行榜 -->
           <svg v-else-if="item.icon === 'topdev'" viewBox="0 0 24 24" width="22" height="22">
             <path
-              d="M12 3l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.9 7.2 18l.9-5.4L4.2 8.7l5.4-.8L12 3z"
+              d="M6.5 11h3.2v8H6.5v-8zm3.9-5h3.2v13h-3.2V6zm3.9 3h3.2v10h-3.2V9z"
               :fill="activeTabKey === item.key ? 'currentColor' : 'none'"
               stroke="currentColor"
               stroke-width="1.7"
               stroke-linejoin="round"
+            />
+            <path
+              d="M5 20.5h14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
             />
           </svg>
           <!-- 工作台 -->
@@ -645,23 +667,22 @@ function formatTime(value: string) {
   top: 0;
   z-index: 40;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 0;
-  padding: 8px 14px 6px;
+  height: 48px;
+  padding: 0 14px;
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid #eef2f7;
+  box-sizing: border-box;
 }
 .mobile-header-main {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex: 1;
 }
 .mobile-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 750;
   color: #111827;
   line-height: 1.2;
@@ -669,28 +690,39 @@ function formatTime(value: string) {
 .mobile-header-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
-  margin-top: -2px;
+  height: 32px;
+}
+.mobile-header-actions :deep(.arco-badge) {
+  line-height: 1;
+}
+.mobile-header-actions :deep(.arco-btn) {
+  width: 32px;
+  height: 32px;
 }
 .mobile-logout {
   color: #6b7280;
   font-weight: 600;
-  padding: 0 6px;
+  padding: 0 6px !important;
+  font-size: 13px;
+  width: auto !important;
+  height: 32px !important;
 }
-.mobile-header-tutorial {
+.mobile-tutorial-hint {
   display: block;
-  max-width: 100%;
+  margin: 0;
+  padding: 8px 16px 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #9ca3af;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 450;
-  line-height: 1.25;
+  line-height: 1.4;
   text-decoration: none;
 }
-.mobile-header-tutorial:active {
+.mobile-tutorial-hint:active {
   color: #6b7280;
 }
 .page-mobile {

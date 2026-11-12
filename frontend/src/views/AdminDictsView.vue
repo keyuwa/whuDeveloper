@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import { api } from '../api'
-import type { DictItem } from '../composables/useDicts'
+import { loadDicts, type DictItem } from '../composables/useDicts'
 
 interface DictType {
   value: string
@@ -99,6 +99,7 @@ function remove(item: DictItem) {
         if (editing.value?.id === item.id) startCreate()
         await loadItems()
       } catch (cause) {
+        await loadDicts(true)
         Message.error(cause instanceof Error ? cause.message : '删除失败')
       }
     },

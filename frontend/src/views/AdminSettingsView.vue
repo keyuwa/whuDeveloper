@@ -235,6 +235,11 @@ watch(
         <a-typography-title :heading="4" style="margin: 0">系统设置</a-typography-title>
         <p class="subtitle">{{ currentMeta.desc }}</p>
       </div>
+      <a-space wrap>
+        <a-button size="small" @click="router.push('/admin/dicts')">字典配置</a-button>
+        <a-button size="small" @click="router.push('/admin/tasks')">任务管理</a-button>
+        <a-button size="small" @click="router.push('/admin/reminders')">催办队列</a-button>
+      </a-space>
     </header>
 
     <nav class="section-tabs" aria-label="设置分类">
@@ -400,7 +405,11 @@ watch(
 }
 .settings-head {
   margin-bottom: 14px;
-  text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 .subtitle {
   margin: 6px 0 0;

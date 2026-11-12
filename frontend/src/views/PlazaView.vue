@@ -383,17 +383,19 @@ async function openPublisherChat(task: Task, event: Event) {
 async function loadSiteConfig() {
   try {
     const config = await api<{
-      tutorialDocUrlStudent: string
-      tutorialDocUrlPublisher: string
+      tutorialDocUrlStudent?: string
+      tutorialDocUrlPublisher?: string
+      /** @deprecated legacy single link; used when role-specific fields are absent */
+      tutorialDocUrl?: string
       tutorialBannerText: string
       plazaBlurbTa?: string
       plazaBlurbIntern?: string
       plazaBlurbRa?: string
       plazaBlurbTeam?: string
     }>('/api/v1/site-config')
-    tutorialDocUrlStudent.value = config.tutorialDocUrlStudent || ''
+    tutorialDocUrlStudent.value = config.tutorialDocUrlStudent || config.tutorialDocUrl || ''
     tutorialDocUrlPublisher.value = config.tutorialDocUrlPublisher || ''
-    if (config.tutorialBannerText) tutorialBannerText.value = config.tutorialBannerText
+    tutorialBannerText.value = config.tutorialBannerText?.trim() || '查看使用教程'
     moduleBlurbs.value = {
       TA: config.plazaBlurbTa || DEFAULT_MODULE_BLURBS.TA,
       INTERN: config.plazaBlurbIntern || DEFAULT_MODULE_BLURBS.INTERN,
