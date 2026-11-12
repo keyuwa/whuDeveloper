@@ -703,28 +703,34 @@ function formatTime(value: string) {
   gap: 4px;
   flex-shrink: 0;
   height: 32px;
-  padding-right: 2px;
+  overflow: visible;
 }
 .mobile-header-actions :deep(.arco-badge) {
   line-height: 1;
+  overflow: visible;
 }
 .mobile-header-actions :deep(.arco-btn) {
   width: 32px;
   height: 32px;
 }
+/* Keep the unread pill inside the bell, not past the header edge. */
+.header-notify-badge {
+  overflow: visible;
+}
 .header-notify-badge :deep(.arco-badge-number),
 .header-notify-badge :deep(.arco-badge-dot) {
-  min-width: 14px;
-  height: 14px;
+  top: 2px !important;
+  right: 2px !important;
+  left: auto !important;
+  min-width: 12px;
+  height: 12px;
   padding: 0 3px;
-  font-size: 10px;
-  line-height: 14px;
-  transform: translate(35%, -35%);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 12px;
+  transform: none !important;
   box-shadow: 0 0 0 1px #fff;
-}
-.header-actions .header-notify-badge :deep(.arco-badge-number),
-.header-actions .header-notify-badge :deep(.arco-badge-dot) {
-  transform: translate(40%, -30%);
+  box-sizing: border-box;
 }
 .mobile-logout {
   color: #6b7280;
