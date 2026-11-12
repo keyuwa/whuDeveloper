@@ -39,8 +39,13 @@ const activeModule = ref<'TA' | 'INTERN' | 'RA' | 'TEAM'>('INTERN')
 const filterDrawerVisible = ref(false)
 const loadMoreSentinel = ref<HTMLElement | null>(null)
 let loadMoreObserver: IntersectionObserver | null = null
-const tutorialDocUrl = ref('')
+const tutorialDocUrlStudent = ref('')
+const tutorialDocUrlPublisher = ref('')
 const tutorialBannerText = ref('查看使用教程')
+const tutorialDocUrl = computed(() => {
+  if (auth.user?.role === 'PUBLISHER') return tutorialDocUrlPublisher.value
+  return tutorialDocUrlStudent.value
+})
 const DEFAULT_MODULE_BLURBS: Record<string, string> = {
   TA: '助教任务：课程支持、答疑与教学协作',
   INTERN: '开发任务：产品功能、工程实现与开源贡献',
@@ -378,14 +383,16 @@ async function openPublisherChat(task: Task, event: Event) {
 async function loadSiteConfig() {
   try {
     const config = await api<{
-      tutorialDocUrl: string
+      tutorialDocUrlStudent: string
+      tutorialDocUrlPublisher: string
       tutorialBannerText: string
       plazaBlurbTa?: string
       plazaBlurbIntern?: string
       plazaBlurbRa?: string
       plazaBlurbTeam?: string
     }>('/api/v1/site-config')
-    tutorialDocUrl.value = config.tutorialDocUrl || ''
+    tutorialDocUrlStudent.value = config.tutorialDocUrlStudent || ''
+    tutorialDocUrlPublisher.value = config.tutorialDocUrlPublisher || ''
     if (config.tutorialBannerText) tutorialBannerText.value = config.tutorialBannerText
     moduleBlurbs.value = {
       TA: config.plazaBlurbTa || DEFAULT_MODULE_BLURBS.TA,

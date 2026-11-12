@@ -178,7 +178,14 @@ public class AdminController {
     @PutMapping("/settings/tutorial")
     public SettingsView updateTutorialSettings(@Valid @RequestBody TutorialSettingsRequest request) {
         AuthUser admin = AuthSupport.requireRole(Role.ADMIN);
-        settings.put("tutorial_doc_url", request.tutorialDocUrl() == null ? "" : request.tutorialDocUrl().trim());
+        String studentUrl =
+                request.tutorialDocUrlStudent() == null ? "" : request.tutorialDocUrlStudent().trim();
+        String publisherUrl =
+                request.tutorialDocUrlPublisher() == null ? "" : request.tutorialDocUrlPublisher().trim();
+        settings.put("tutorial_doc_url_student", studentUrl);
+        settings.put("tutorial_doc_url_publisher", publisherUrl);
+        // Keep legacy key aligned with student link for older readers.
+        settings.put("tutorial_doc_url", studentUrl);
         settings.put(
                 "tutorial_banner_text",
                 request.tutorialBannerText() == null || request.tutorialBannerText().isBlank()
@@ -230,10 +237,16 @@ public class AdminController {
 
     private SettingsView currentSettings() {
         String apiKey = settings.getRaw("ark_api_key", "");
+        String legacyTutorial = settings.getString("tutorial_doc_url", "");
+        String studentTutorial = settings.getString("tutorial_doc_url_student", "");
+        if (studentTutorial.isBlank()) {
+            studentTutorial = legacyTutorial;
+        }
         return new SettingsView(
                 settings.getInt("review_sla_days", 7),
                 settings.getInt("escalate_sla_days", 14),
-                settings.getString("tutorial_doc_url", ""),
+                studentTutorial,
+                settings.getString("tutorial_doc_url_publisher", ""),
                 settings.getString("tutorial_banner_text", "查看使用教程"),
                 settings.getString("plaza_blurb_ta", SiteConfigController.DEFAULT_BLURB_TA),
                 settings.getString("plaza_blurb_intern", SiteConfigController.DEFAULT_BLURB_INTERN),
@@ -305,7 +318,8 @@ public class AdminController {
     }
 
     public record TutorialSettingsRequest(
-            @Size(max = 1000) String tutorialDocUrl,
+            @Size(max = 1000) String tutorialDocUrlStudent,
+            @Size(max = 1000) String tutorialDocUrlPublisher,
             @Size(max = 500) String tutorialBannerText
     ) {
     }
@@ -327,7 +341,8 @@ public class AdminController {
     public record SettingsView(
             int reviewSlaDays,
             int escalateSlaDays,
-            String tutorialDocUrl,
+            String tutorialDocUrlStudent,
+            String tutorialDocUrlPublisher,
             String tutorialBannerText,
             String plazaBlurbTa,
             String plazaBlurbIntern,

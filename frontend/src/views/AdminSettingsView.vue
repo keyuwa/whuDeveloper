@@ -10,7 +10,8 @@ type SettingsSection = 'ark' | 'rubric' | 'tutorial' | 'plaza' | 'sla'
 type SettingsPayload = {
   reviewSlaDays: number
   escalateSlaDays: number
-  tutorialDocUrl: string
+  tutorialDocUrlStudent: string
+  tutorialDocUrlPublisher: string
   tutorialBannerText: string
   plazaBlurbTa: string
   plazaBlurbIntern: string
@@ -28,7 +29,7 @@ type SettingsPayload = {
 const SECTIONS: { key: SettingsSection; label: string; desc: string }[] = [
   { key: 'ark', label: '科研 RA · AI', desc: '揭榜方案可行性初判接入与 Prompt' },
   { key: 'rubric', label: 'WHU Dev 细则', desc: '能力裁定 Markdown 细则' },
-  { key: 'tutorial', label: '教程文档', desc: '任务广场教程 Banner' },
+  { key: 'tutorial', label: '教程文档', desc: '学生 / 发布方教程链接' },
   { key: 'plaza', label: '频道说明', desc: '广场助教 / 开发 / 科研 / 项目简介' },
   { key: 'sla', label: 'SLA', desc: '催办与升级天数' },
 ]
@@ -52,7 +53,8 @@ const testResult = ref<{ ok: boolean; message: string; latencyMs?: number | null
 const form = reactive({
   reviewSlaDays: 7,
   escalateSlaDays: 14,
-  tutorialDocUrl: '',
+  tutorialDocUrlStudent: '',
+  tutorialDocUrlPublisher: '',
   tutorialBannerText: '查看使用教程',
   plazaBlurbTa: DEFAULT_PLAZA_BLURBS.plazaBlurbTa,
   plazaBlurbIntern: DEFAULT_PLAZA_BLURBS.plazaBlurbIntern,
@@ -89,7 +91,8 @@ const promptPlaceholder = `留空则使用内置默认模板。可用占位符�
 function applySettings(settings: SettingsPayload) {
   form.reviewSlaDays = settings.reviewSlaDays
   form.escalateSlaDays = settings.escalateSlaDays
-  form.tutorialDocUrl = settings.tutorialDocUrl || ''
+  form.tutorialDocUrlStudent = settings.tutorialDocUrlStudent || ''
+  form.tutorialDocUrlPublisher = settings.tutorialDocUrlPublisher || ''
   form.tutorialBannerText = settings.tutorialBannerText || form.tutorialBannerText
   form.plazaBlurbTa = settings.plazaBlurbTa || DEFAULT_PLAZA_BLURBS.plazaBlurbTa
   form.plazaBlurbIntern = settings.plazaBlurbIntern || DEFAULT_PLAZA_BLURBS.plazaBlurbIntern
@@ -139,7 +142,8 @@ async function saveCurrent() {
       },
       rubric: { abilityRubricMd: form.abilityRubricMd },
       tutorial: {
-        tutorialDocUrl: form.tutorialDocUrl,
+        tutorialDocUrlStudent: form.tutorialDocUrlStudent,
+        tutorialDocUrlPublisher: form.tutorialDocUrlPublisher,
         tutorialBannerText: form.tutorialBannerText,
       },
       plaza: {
@@ -332,13 +336,16 @@ watch(
 
         <template v-else-if="section === 'tutorial'">
           <a-typography-paragraph type="secondary">
-            配置后会在任务广场流程条下方显示教程 Banner；链接为空则不展示。
+            学生与发布方看到各自的教程链接；未登录访客默认看学生教程。对应链接为空则不展示入口。
           </a-typography-paragraph>
           <a-form :model="form" layout="vertical" style="max-width: 640px">
-            <a-form-item label="教程文档链接">
-              <a-input v-model="form.tutorialDocUrl" placeholder="例如飞书 Wiki 链接" allow-clear />
+            <a-form-item label="学生教程链接">
+              <a-input v-model="form.tutorialDocUrlStudent" placeholder="例如飞书 Wiki 链接" allow-clear />
             </a-form-item>
-            <a-form-item label="Banner 文案">
+            <a-form-item label="发布方教程链接">
+              <a-input v-model="form.tutorialDocUrlPublisher" placeholder="例如飞书 Wiki 链接" allow-clear />
+            </a-form-item>
+            <a-form-item label="入口文案">
               <a-input v-model="form.tutorialBannerText" placeholder="提示文案" allow-clear />
             </a-form-item>
           </a-form>

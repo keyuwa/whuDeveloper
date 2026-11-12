@@ -16,8 +16,15 @@ public class SiteConfigController {
 
     @GetMapping("/site-config")
     public SiteConfigView siteConfig() {
+        String legacy = settings.getString("tutorial_doc_url", "");
+        String student = settings.getString("tutorial_doc_url_student", "");
+        String publisher = settings.getString("tutorial_doc_url_publisher", "");
+        if (student.isBlank()) {
+            student = legacy;
+        }
         return new SiteConfigView(
-                settings.getString("tutorial_doc_url", ""),
+                student,
+                publisher,
                 settings.getString("tutorial_banner_text", "查看使用教程"),
                 settings.getString("plaza_blurb_ta", DEFAULT_BLURB_TA),
                 settings.getString("plaza_blurb_intern", DEFAULT_BLURB_INTERN),
@@ -31,7 +38,8 @@ public class SiteConfigController {
     public static final String DEFAULT_BLURB_TEAM = "项目：运营、标注等协作需求，按岗位报名，一次可招多人";
 
     public record SiteConfigView(
-            String tutorialDocUrl,
+            String tutorialDocUrlStudent,
+            String tutorialDocUrlPublisher,
             String tutorialBannerText,
             String plazaBlurbTa,
             String plazaBlurbIntern,

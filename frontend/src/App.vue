@@ -32,9 +32,14 @@ const pendingApplications = ref(0)
 const drawerVisible = ref(false)
 const notifications = ref<NotificationItem[]>([])
 const loadingNotifications = ref(false)
-const tutorialDocUrl = ref('')
+const tutorialDocUrlStudent = ref('')
+const tutorialDocUrlPublisher = ref('')
 const tutorialBannerText = ref('查看使用教程')
 const user = computed(() => auth.user)
+const tutorialDocUrl = computed(() => {
+  if (user.value?.role === 'PUBLISHER') return tutorialDocUrlPublisher.value
+  return tutorialDocUrlStudent.value
+})
 const showMobileTutorial = computed(
   () => isMobile.value && route.path === '/' && Boolean(tutorialDocUrl.value),
 )
@@ -279,8 +284,13 @@ function clearAll() {
 
 async function loadSiteConfig() {
   try {
-    const config = await api<{ tutorialDocUrl: string; tutorialBannerText: string }>('/api/v1/site-config')
-    tutorialDocUrl.value = config.tutorialDocUrl || ''
+    const config = await api<{
+      tutorialDocUrlStudent: string
+      tutorialDocUrlPublisher: string
+      tutorialBannerText: string
+    }>('/api/v1/site-config')
+    tutorialDocUrlStudent.value = config.tutorialDocUrlStudent || ''
+    tutorialDocUrlPublisher.value = config.tutorialDocUrlPublisher || ''
     if (config.tutorialBannerText) tutorialBannerText.value = config.tutorialBannerText
   } catch {
     /* optional */
