@@ -507,7 +507,7 @@ async function startChat() {
 </style>
 
 <style scoped>
-.detail { max-width: 1080px; width: 100%; margin: 0 auto; gap: 26px; padding: 10px 0 40px; box-sizing: border-box; }
+.detail { width: 100%; margin: 0; gap: 26px; padding: 10px 0 40px; box-sizing: border-box; }
 .back-link { color: #737e90; font-size: 13px; width: fit-content; }
 .hero-card { background: #fff; border-radius: 4px; border-top: 4px solid #2563b5; }
 .hero-card :deep(.arco-card-body) { padding: 34px 38px; }

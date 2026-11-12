@@ -757,6 +757,8 @@ function formatTime(value: string) {
   color: #6b7280;
 }
 .page-mobile {
+  width: 100% !important;
+  margin: 0 !important;
   padding: 12px 12px 24px !important;
 }
 .app-shell.tab-pad .page-mobile {

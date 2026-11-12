@@ -760,12 +760,13 @@ onUnmounted(() => {
 .module-tab {
   text-align: left;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
   background: #fff;
-  padding: 16px 18px;
+  padding: 14px 14px;
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  min-width: 0;
 }
 .module-tab:hover {
   border-color: #bfdbfe;
@@ -784,10 +785,13 @@ onUnmounted(() => {
 }
 .module-tab.active .module-name { color: #1d4ed8; }
 .module-blurb {
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   margin-top: 6px;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.45;
   color: var(--muted);
 }
 .module-tab.active .module-blurb { color: #4b5563; }
@@ -808,7 +812,7 @@ onUnmounted(() => {
   align-items: center;
   overflow: hidden;
   margin-bottom: 14px;
-  padding: 34px 42px;
+  padding: 28px 32px;
   border: 1px solid var(--hero-line);
   border-radius: 16px;
   background:
@@ -1162,16 +1166,19 @@ onUnmounted(() => {
 .project-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 920px;
+  min-width: 0;
+  table-layout: fixed;
   font-size: 14px;
   color: var(--ink);
 }
 .project-table th,
 .project-table td {
-  padding: 14px 16px;
+  padding: 12px 12px;
   border-bottom: 1px solid #eef1f5;
   text-align: left;
   vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .project-table thead th {
   background: #f6f8fb;
@@ -1191,7 +1198,7 @@ onUnmounted(() => {
   border-bottom: none;
 }
 .col-code {
-  width: 108px;
+  width: 96px;
   white-space: nowrap;
 }
 .mono {
@@ -1200,16 +1207,20 @@ onUnmounted(() => {
   font-size: 13px;
 }
 .col-title {
-  min-width: 280px;
+  width: 34%;
 }
 .title-cell {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 .title-text {
   color: #1d4ed8;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .project-row:hover .title-text {
   text-decoration: underline;

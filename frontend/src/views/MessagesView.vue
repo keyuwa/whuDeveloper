@@ -207,6 +207,12 @@ watch(
 
 <template>
   <section class="messages-page" :class="{ 'messages-mobile': isMobile }">
+    <div v-if="!isMobile" class="page-head messages-head">
+      <div>
+        <h1>私信</h1>
+        <p class="subtitle">围绕任务与对方沟通，会话按任务分开</p>
+      </div>
+    </div>
     <a-spin :loading="loading" class="chat-shell-spin">
       <div class="chat-shell" :class="{ 'mobile-mode': isMobile }">
         <aside v-if="showThreadPane" class="thread-pane">
@@ -239,7 +245,7 @@ watch(
             <div class="chat-header">
               <div class="chat-header-main">
                 <button v-if="isMobile" type="button" class="back-chat" @click="clearActiveChat">← 返回</button>
-                <div>
+                <div class="chat-header-text">
                   <strong>{{ peerName || '对话' }}</strong>
                   <div class="chat-task">
                     <router-link :to="`/tasks/${activeTaskId}`">{{ activeThread?.taskTitle || `任务 #${activeTaskId}` }}</router-link>
@@ -265,8 +271,8 @@ watch(
             <div class="chat-composer">
               <a-textarea
                 v-model="draft"
-                :auto-size="{ minRows: 2, maxRows: 5 }"
-                placeholder="输入消息，Ctrl + Enter 可快速发送"
+                :auto-size="{ minRows: 2, maxRows: 4 }"
+                placeholder="输入消息，Ctrl + Enter 发送"
                 @keydown.ctrl.enter="send"
               />
               <a-button type="primary" :loading="sending" :disabled="!draft.trim()" @click="send">发送</a-button>
@@ -285,45 +291,47 @@ watch(
 .messages-page {
   width: 100%;
 }
+.messages-head {
+  margin-bottom: 16px;
+}
 .chat-shell-spin {
   width: 100%;
   display: block;
 }
 .chat-shell {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  min-height: calc(100vh - 120px);
+  grid-template-columns: 280px minmax(0, 1fr);
+  height: min(680px, calc(100vh - 200px));
+  min-height: 480px;
   gap: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  overflow: visible;
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
 }
 .thread-pane {
   border-right: 1px solid #eef2f7;
-  background: transparent;
+  background: #fafbfc;
   overflow-y: auto;
-  max-height: calc(100vh - 120px);
-  padding-right: 8px;
+  padding: 12px 10px;
 }
 .pane-title {
-  padding: 4px 8px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #9ca3af;
+  padding: 4px 10px 12px;
+  font-size: 13px;
+  font-weight: 650;
+  color: #6b7280;
 }
 .thread-item {
   display: block;
   width: 100%;
   text-align: left;
   border: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: transparent;
-  padding: 12px 12px;
+  padding: 10px 12px;
   cursor: pointer;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   transition: background 0.15s ease;
 }
 .thread-item:hover {
@@ -342,6 +350,9 @@ watch(
   font-size: 14px;
   font-weight: 700;
   color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .thread-actions {
   display: flex;
@@ -375,9 +386,12 @@ watch(
   font-size: 12px;
   color: #2563eb;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .thread-preview {
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 12px;
   color: #6b7280;
   overflow: hidden;
@@ -387,26 +401,37 @@ watch(
 .chat-pane {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 120px);
-  max-height: calc(100vh - 120px);
-  padding-left: 20px;
+  min-height: 0;
+  min-width: 0;
+  background: #fff;
 }
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 4px 0 14px;
+  padding: 14px 18px;
   border-bottom: 1px solid #eef2f7;
+  flex: none;
+}
+.chat-header-text {
+  min-width: 0;
 }
 .chat-header strong {
-  font-size: 16px;
+  display: block;
+  font-size: 15px;
   font-weight: 700;
   color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chat-task {
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chat-task a {
   color: #2563eb;
@@ -415,38 +440,39 @@ watch(
 .chat-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 18px 0;
-  background: transparent;
+  padding: 16px 18px;
+  background: #f8fafc;
+  min-height: 0;
 }
 .bubble-row {
   display: flex;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .bubble-row.mine {
   justify-content: flex-end;
 }
 .bubble {
-  max-width: min(480px, 85%);
-  padding: 10px 14px;
-  border-radius: 14px;
+  max-width: min(420px, 78%);
+  padding: 9px 12px;
+  border-radius: 12px;
   background: #fff;
   border: 1px solid #eef2f7;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 .bubble-row.mine .bubble {
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
-  border-color: transparent;
+  background: #2563eb;
+  border-color: #2563eb;
   color: #fff;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  box-shadow: none;
 }
 .bubble-meta {
   font-size: 11px;
   opacity: 0.72;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 .bubble-body {
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -455,15 +481,16 @@ watch(
   grid-template-columns: 1fr auto;
   gap: 10px;
   align-items: end;
-  padding: 14px 0 0;
+  padding: 12px 18px 14px;
   border-top: 1px solid #eef2f7;
-  background: transparent;
+  background: #fff;
+  flex: none;
 }
 .chat-empty {
   flex: 1;
   display: grid;
   place-items: center;
-  background: transparent;
+  background: #f8fafc;
 }
 .chat-header-main {
   display: flex;
@@ -483,17 +510,29 @@ watch(
 }
 .chat-shell.mobile-mode {
   grid-template-columns: 1fr;
+  height: auto;
   min-height: calc(100vh - 120px);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
 }
 .messages-mobile .thread-pane {
   max-height: none;
   border-right: 0;
-  padding-right: 0;
+  padding: 0;
+  background: transparent;
 }
 .messages-mobile .chat-pane {
-  padding-left: 0;
   min-height: calc(100vh - 110px);
   max-height: calc(100vh - 110px);
+  background: #fff;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.messages-mobile .chat-scroll {
+  background: #f8fafc;
 }
 .messages-mobile .thread-delete {
   opacity: 1;
@@ -501,7 +540,8 @@ watch(
 @media (max-width: 800px) {
   .chat-shell:not(.mobile-mode) {
     grid-template-columns: 1fr;
-    min-height: auto;
+    height: auto;
+    min-height: 420px;
   }
 }
 </style>
