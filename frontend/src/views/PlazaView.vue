@@ -262,6 +262,10 @@ function seatLabel(task: Task) {
   return `${task.filled}/${task.quota}`
 }
 
+async function requestTaskPage(nextPage: number) {
+  return api<TaskPage>(`/api/v1/tasks?roleType=${activeModule.value}&page=${nextPage}&size=${PAGE_SIZE}`)
+}
+
 async function fetchPage(nextPage: number, append: boolean) {
   if (append) {
     if (loadingMore.value || loading.value || !hasMore.value) return
@@ -271,9 +275,15 @@ async function fetchPage(nextPage: number, append: boolean) {
     loadError.value = false
   }
   try {
-    const data = await api<TaskPage>(
-      `/api/v1/tasks?roleType=${activeModule.value}&page=${nextPage}&size=${PAGE_SIZE}`,
-    )
+    let data: TaskPage
+    try {
+      data = await requestTaskPage(nextPage)
+    } catch (firstError) {
+      // Cold-start / first proxy hop often fails once; retry before showing empty.
+      if (append) throw firstError
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      data = await requestTaskPage(nextPage)
+    }
     sourceTasks.value = append
       ? [...sourceTasks.value, ...data.items.filter((item) => !sourceTasks.value.some((row) => row.id === item.id))]
       : data.items
@@ -297,6 +307,8 @@ async function fetchPage(nextPage: number, append: boolean) {
 async function loadModuleList() {
   page.value = 0
   hasMore.value = true
+  loading.value = true
+  loadError.value = false
   await fetchPage(0, false)
   await nextTick()
   observeLoadMore()
@@ -415,9 +427,12 @@ async function loadSiteConfig() {
   }
 }
 
-onMounted(async () => {
-  await Promise.all([loadDicts(), loadSiteConfig()])
-  await loadModuleList()
+onMounted(() => {
+  // Show spinner immediately; do not wait on dicts/config or first paint looks empty.
+  loading.value = true
+  void loadModuleList()
+  void loadDicts()
+  void loadSiteConfig()
 })
 
 onUnmounted(() => {

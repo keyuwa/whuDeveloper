@@ -6,7 +6,10 @@ const MOBILE_QUERY = '(max-width: 768px)'
 
 /** Root-only: create reactive device state and provide it. */
 export function provideDevice() {
-  const isMobile = ref(false)
+  // Sync on create so the first paint (and plaza list mode) is not stuck on desktop.
+  const isMobile = ref(
+    typeof window !== 'undefined' ? window.matchMedia(MOBILE_QUERY).matches : false,
+  )
   let media: MediaQueryList | null = null
 
   function sync() {
