@@ -5,7 +5,7 @@ import { Message, Modal } from '@arco-design/web-vue'
 import { api } from '../api'
 import { auth } from '../auth'
 import { useIsMobile } from '../composables/useDevice'
-import type { ChatMessage, Task, ThreadSummary } from '../types'
+import type { Application, ChatMessage, Task, ThreadSummary } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -190,12 +190,41 @@ async function openFromQuery() {
     }
   }
 
+  if (isPublisher.value && studentId) {
+    await ensurePublisherThread(taskId, studentId)
+  }
   activeTaskId.value = taskId
   activeStudentId.value = studentId
-  if (!threads.value.find((item) => item.taskId === taskId && (!isPublisher.value || item.studentId === studentId))) {
-    if (isPublisher.value && studentId) await loadInbox()
-  }
   await loadThread(taskId, studentId)
+}
+
+async function ensurePublisherThread(taskId: number, studentId: number) {
+  if (threads.value.some((item) => item.taskId === taskId && item.studentId === studentId)) return
+  await loadInbox()
+  if (threads.value.some((item) => item.taskId === taskId && item.studentId === studentId)) return
+  const task = await api<Task>(`/api/v1/tasks/${taskId}`)
+  let studentName = '学生'
+  let taskTitle = task.title
+  try {
+    const applications = await api<Application[]>('/api/v1/publisher/applications')
+    const application = applications.find((item) => item.taskId === taskId && item.studentId === studentId)
+    if (application) {
+      studentName = application.realName || application.studentName || studentName
+      taskTitle = application.taskTitle || taskTitle
+    }
+  } catch {
+    // 申请列表失败时仍用任务标题标出会话
+  }
+  threads.value.unshift({
+    taskId,
+    taskTitle,
+    publisherId: task.publisherId,
+    publisherName: task.publisherName,
+    studentId,
+    studentName,
+    lastBody: '暂无消息，发送第一条开始沟通',
+    createdAt: new Date().toISOString(),
+  })
 }
 
 async function send() {
