@@ -182,6 +182,7 @@ function leaveProject() {
   border: 1px solid var(--desktop-line);
   border-radius: var(--radius-lg);
   padding: 18px 22px;
+  margin-bottom: 24px;
 }
 @media (max-width: 700px) { .shell-hero { flex-direction: row; align-items: flex-start; }.shell-hero-main { min-width: 0; } }
 @media (max-width: 767px) {

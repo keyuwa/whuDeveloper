@@ -239,20 +239,24 @@ async function startChat() {
   <section v-if="task" class="detail" :class="{ 'detail-mobile': isMobile, 'detail-embedded': embedded, 'has-mobile-cta': isMobile && isStudent }">
     <router-link v-if="!embedded" :to="backLink.to" class="back-link">← {{ backLink.label }}</router-link>
     <a-card class="hero-card" :bordered="false">
-      <a-typography-title :heading="3" style="margin: 0 0 12px">{{ task.title }}</a-typography-title>
-      <a-space wrap>
-        <a-tag size="large" class="mono">{{ task.publicCode }}</a-tag>
-        <a-tag color="arcoblue" size="large">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
-        <a-tag v-if="task.roleType === 'INTERN'" color="orangered" size="large">{{ task.difficulty }}</a-tag>
-        <a-tag v-if="isChallenge && task.challengeStatus" color="purple" size="large">
-          {{ CHALLENGE_STATUS_LABEL[task.challengeStatus] || task.challengeStatus }}
-        </a-tag>
-        <a-tag size="large">名额 {{ task.filled }}/{{ task.quota }}</a-tag>
-        <a-tag v-if="isChallenge" size="large">
-          {{ task.bidDeadline ? `截止 ${task.bidDeadline.replace('T', ' ').slice(0, 16)}` : '长期开放' }}
-        </a-tag>
-        <a-tag v-if="isChallenge" size="large">待审方案 {{ task.pendingApplications || 0 }}</a-tag>
-      </a-space>
+      <div class="hero-head">
+        <a-typography-title :heading="3">{{ task.title }}</a-typography-title>
+        <div class="hero-tags">
+          <a-tag class="mono">{{ task.publicCode }}</a-tag>
+          <a-tag color="arcoblue">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
+          <a-tag v-if="task.roleType === 'INTERN'" color="orangered">{{ task.difficulty }}</a-tag>
+          <a-tag v-if="isChallenge && task.challengeStatus" color="purple">
+            {{ CHALLENGE_STATUS_LABEL[task.challengeStatus] || task.challengeStatus }}
+          </a-tag>
+        </div>
+        <p class="hero-meta">
+          <span>名额 {{ task.filled }}/{{ task.quota }}</span>
+          <template v-if="isChallenge">
+            <span>{{ task.bidDeadline ? `截止 ${task.bidDeadline.replace('T', ' ').slice(0, 16)}` : '长期开放' }}</span>
+            <span>待审方案 {{ task.pendingApplications || 0 }}</span>
+          </template>
+        </p>
+      </div>
       <div v-if="isStudent && !isMobile" class="hero-actions">
         <a-button type="primary" :loading="loading" @click="startChat">立即沟通</a-button>
         <a-button
@@ -558,8 +562,17 @@ async function startChat() {
 .project-document h3 { font-size: 16px; margin: 24px 0 10px; color: #111827; }
 .project-document h3:first-child { margin-top: 0; }
 .project-document p { margin-bottom: 10px; }
-.side-col :deep(.arco-card) { border: 1px solid var(--surface-line); border-radius: var(--surface-radius); box-shadow: var(--shadow-xs); }
-.side-col :deep(.arco-card-header) { background: #f9fafb; }
+.side-col :deep(.arco-card) {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: var(--shadow-xs);
+}
+.side-col :deep(.arco-card-header) {
+  background: #f9fafb;
+  border-radius: 11px 11px 0 0;
+}
 .meta-row { grid-template-columns: 70px minmax(0,1fr); line-height: 1.8; overflow-wrap: anywhere; }
 .meta-list { gap: 20px; }
 .doc-file { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #e6ebf1; border-radius: 6px; background: #f8fafc; }
@@ -567,11 +580,71 @@ async function startChat() {
 </style>
 
 <style scoped>
-.hero-card { border-top: 0; background: transparent; }
-.hero-card :deep(.arco-card-body) { padding: 8px 0 18px; border-bottom: 1px solid #e1e7ee; }
-.hero-card :deep(h3) { font-size: 26px; }
-.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 18px; }
-.apply-jump { font-size: 13px; color: #2868b7; }
+.hero-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+}
+.hero-card :deep(.arco-card-body) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+  padding: 22px 32px 20px;
+  border: 0;
+}
+.hero-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+.hero-card :deep(h3) {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.35;
+}
+.hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding-top: 4px;
+}
+.hero-actions :deep(.arco-btn) {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.apply-jump {
+  flex: 1 0 100%;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 32px;
+  color: #2868b7;
+  white-space: nowrap;
+}
 .application-panel { scroll-margin-top: 24px; scroll-margin-bottom: 96px; }
 .application-intro { color: #657386; font-size: 14px; line-height: 1.8; margin: 14px 0; }
 .application-guide { background: #f6f8fb; padding: 16px; margin: 16px 0; line-height: 1.9; font-size: 13px; }
@@ -697,7 +770,7 @@ async function startChat() {
     max-height: calc(100vh - 96px);
     overflow: auto;
   }
-  .detail:not(.detail-mobile) .hero-card { border-bottom-color: var(--desktop-line); }
+  .detail:not(.detail-mobile) .hero-card { border-color: #e2e8f0; }
 }
 </style>
 
@@ -705,15 +778,58 @@ async function startChat() {
 .detail-state { padding: 32px; text-align: center; }
 .detail-state p { margin-bottom: 12px; }
 .detail.detail-embedded { gap: 0; }
-.detail-embedded .detail-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 12px; }
-.detail-embedded .side-col {
-  position: static;
-  top: auto;
-  max-height: none;
-  overflow: visible;
-  grid-row: 1;
+.detail-embedded .detail-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0 20px 28px;
 }
-.detail-embedded .hero-card { border-radius: 12px 12px 0 0; }
-.detail-embedded .hero-card :deep(.arco-card-body) { padding: 20px; }
-.detail-embedded :deep(.arco-card) { overflow-wrap: anywhere; }
+.detail-embedded .detail-grid > *,
+.detail-embedded :deep(.arco-card) {
+  width: 100%;
+  max-width: 100%;
+}
+.detail-embedded .main-col,
+.detail-embedded .side-col {
+  display: contents;
+}
+.detail-embedded .side-col :deep(.arco-card) { order: -1; }
+.detail.detail-embedded .hero-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.detail-embedded .hero-card :deep(.arco-card-body) { padding: 16px 20px 8px; }
+.detail-embedded :deep(.arco-card) {
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow-wrap: anywhere;
+}
+.detail-embedded :deep(.arco-card-header) {
+  margin: 0;
+  padding: 18px 0 8px;
+  height: auto;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid #e2e8f0;
+}
+.detail-embedded :deep(.arco-card-header-title) {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+.detail-embedded :deep(.arco-card-body) { padding: 0 0 8px; }
+.detail-embedded .doc-file {
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
 </style>
