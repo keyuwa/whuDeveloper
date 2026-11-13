@@ -437,7 +437,9 @@ async function startChat() {
               <span class="meta-label">{{ task.roleType === 'RA' ? '研究方向' : '技术领域' }}</span>
               <div>
                 <a-tag color="arcoblue" size="small" style="margin-right: 6px">{{ task.techField }}</a-tag>
-                <a-tag v-for="tag in techFieldTags" :key="tag" size="small" style="margin: 0 6px 6px 0">{{ tag }}</a-tag>
+                <template v-if="task.roleType === 'INTERN'">
+                  <a-tag v-for="tag in techFieldTags" :key="tag" size="small" style="margin: 0 6px 6px 0">{{ tag }}</a-tag>
+                </template>
               </div>
             </div>
             <div v-if="task.roleType === 'INTERN'" class="meta-row">
