@@ -6,7 +6,8 @@ import { api } from '../api'
 import ProposalFile from '../components/ProposalFile.vue'
 import { useIsMobile } from '../composables/useDevice'
 import { renderMarkdown } from '../markdown'
-import type { Application } from '../types'
+import { TASK_ROLE_TYPES, type Application } from '../types'
+import TaskFilterBar from '../components/TaskFilterBar.vue'
 
 type AiDetail = {
   completeness?: number
@@ -23,7 +24,8 @@ const isMobile = useIsMobile()
 const items = ref<Application[]>([])
 const notes = ref<Record<number, string>>({})
 const loading = ref(false)
-const tab = ref<'pending' | 'all'>('pending')
+const tab = ref('pending')
+const roleTab = ref<typeof TASK_ROLE_TYPES[number]['value'] | ''>('')
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const statusLabel: Record<string, string> = {
@@ -84,8 +86,10 @@ const taskIdFilter = computed(() => {
 
 const filtered = computed(() => {
   let list = items.value
+  if (roleTab.value) list = list.filter((item) => item.taskRoleType === roleTab.value)
   if (taskIdFilter.value) list = list.filter((item) => item.taskId === taskIdFilter.value)
   if (tab.value === 'pending') list = list.filter((item) => item.status === 'SUBMITTED' || item.status === 'INTERVIEW')
+  else if (tab.value !== 'all') list = list.filter((item) => item.status === tab.value)
   return list
 })
 
@@ -103,8 +107,27 @@ const selected = computed(() =>
   candidates.value.find((item) => item.id === selectedId.value) ?? candidates.value[0],
 )
 const displayed = computed(() => {
-  if (isMobile.value) return filtered.value
+  if (isMobile.value) return candidates.value
   return selected.value ? [selected.value] : []
+})
+const taskOptions = computed(() => {
+  const seen = new Map<number, string>()
+  for (const item of items.value) {
+    if (roleTab.value && item.taskRoleType !== roleTab.value) continue
+    if (!seen.has(item.taskId)) seen.set(item.taskId, item.taskTitle)
+  }
+  return [...seen.entries()].map(([id, title]) => ({ value: String(id), label: title }))
+})
+const taskPick = computed({
+  get: () => (taskIdFilter.value ? String(taskIdFilter.value) : undefined),
+  set: (value: string | undefined) => {
+    if (!value) router.push('/publisher/inbox')
+    else router.push({ path: '/publisher/inbox', query: { taskId: value } })
+  },
+})
+const emptyDescription = computed(() => {
+  if (keyword.value.trim() || taskIdFilter.value || roleTab.value) return '没有匹配的申请'
+  return tab.value === 'pending' ? '暂无待审申请' : '还没有人申请该任务'
 })
 
 const filterTitle = computed(() => {
@@ -152,6 +175,11 @@ onUnmounted(() => {
 
 watch(taskIdFilter, (id) => {
   if (id) tab.value = 'all'
+}, { immediate: true })
+
+watch(roleTab, () => {
+  selectedId.value = null
+  if (taskIdFilter.value) taskPick.value = undefined
 })
 
 async function review(id: number, decision: 'ACCEPT' | 'REJECT') {
@@ -205,41 +233,48 @@ async function rescoreAi(id: number) {
   }
 }
 
-function clearTaskFilter() {
-  router.push('/publisher/inbox')
-}
 </script>
 
 <template>
-  <section :class="{ 'inbox-mobile': isMobile }">
-    <header class="page-head">
+  <section class="inbox-board" :class="{ 'inbox-mobile': isMobile }">
+    <section class="review-management-panel" aria-label="申请审阅与筛选">
+    <header class="management-heading">
       <div>
         <a-typography-title v-if="!isMobile" :heading="4" style="margin: 0">申请审阅</a-typography-title>
-        <p class="subtitle">
+        <p class="management-description">
           <template v-if="filterTitle">正在查看「{{ filterTitle }}」的申请</template>
-          <template v-else-if="!isMobile">学生申请后会出现在这里；通过后可进入协作项目。</template>
+          <template v-else-if="!isMobile">查看申请书、审阅学生申请，跟进录取结果</template>
           <template v-else>待审 {{ pendingCount }} 份</template>
         </p>
       </div>
-      <a-button v-if="taskIdFilter" size="small" @click="clearTaskFilter">全部任务</a-button>
     </header>
 
-    <a-tabs v-model:active-key="tab" type="rounded" :size="isMobile ? 'medium' : 'large'" style="margin-bottom: 12px">
-      <a-tab-pane key="pending" :title="`待审阅 · ${pendingCount}`" />
-      <a-tab-pane key="all" :title="`全部 · ${taskIdFilter ? items.filter(i => i.taskId === taskIdFilter).length : items.length}`" />
-    </a-tabs>
+    <TaskFilterBar v-model="roleTab" class="management-filters" show-all>
+      <a-input v-model="keyword" allow-clear size="medium" aria-label="搜索申请" placeholder="搜索姓名、学校或任务">
+        <template #prefix><icon-search aria-hidden="true" /></template>
+      </a-input>
+      <a-select v-model="tab" size="medium" aria-label="审阅状态">
+        <a-option value="all">全部状态</a-option>
+        <a-option value="pending">待审阅</a-option>
+        <a-option value="INTERVIEW">面试中</a-option>
+        <a-option value="ACCEPTED">已通过</a-option>
+        <a-option value="REJECTED">未通过</a-option>
+        <a-option value="WITHDRAWN">已撤回</a-option>
+      </a-select>
+      <a-select v-model="taskPick" size="medium" allow-clear allow-search
+        aria-label="所属任务" placeholder="全部任务" :options="taskOptions" />
+      <a-button v-if="keyword || taskIdFilter || tab !== 'pending' || roleTab" type="text"
+        @click="keyword = ''; taskPick = undefined; tab = 'pending'; roleTab = ''">清空</a-button>
+    </TaskFilterBar>
+    </section>
 
     <a-empty
-      v-if="filtered.length === 0"
-      :description="tab === 'pending' ? '暂无待审申请' : '还没有人申请该任务'"
+      v-if="candidates.length === 0"
+      :description="emptyDescription"
     />
     <div v-else class="review-workspace" :class="{ 'review-desktop': !isMobile }">
       <aside v-if="!isMobile" class="candidate-panel" aria-label="候选人">
-        <div class="candidate-search">
-          <a-input v-model="keyword" aria-label="搜索候选人" placeholder="搜索姓名、学校或项目" allow-clear />
-        </div>
-        <a-empty v-if="!candidates.length" description="没有匹配的申请" />
-        <div v-else class="candidate-list">
+        <div class="candidate-list">
           <button
             v-for="candidate in candidates"
             :key="candidate.id"
@@ -262,9 +297,9 @@ function clearTaskFilter() {
       <div class="stack review-detail">
       <a-card v-for="item in displayed" :key="item.id">
         <div style="display: flex; justify-content: space-between; gap: 12px; align-items: center">
-          <a-typography-title :heading="6" style="margin: 0">
+          <a-typography-title class="applicant-heading" :heading="6" style="margin: 0">
             {{ item.realName || item.studentName }}
-            <template v-if="item.studentIdentity"> · {{ item.studentIdentity }}</template>
+            <span v-if="item.studentIdentity" class="applicant-identity"> · {{ item.studentIdentity }}</span>
           </a-typography-title>
           <a-tag :color="statusColor[item.status] || 'gray'">
             {{ statusLabel[item.status] || item.status }}
@@ -370,17 +405,135 @@ function clearTaskFilter() {
 </template>
 
 <style scoped>
+.review-management-panel {
+  flex: none;
+  margin-bottom: 16px;
+  padding: 0;
+  border: 1px solid var(--surface-line);
+  border-radius: var(--surface-radius);
+  background: var(--bg-surface);
+}
+.management-heading {
+  padding: 18px 20px 16px;
+  background: var(--heading-surface);
+  border-radius: var(--surface-radius) var(--surface-radius) 0 0;
+}
+.management-heading :deep(.arco-typography) { font-size: 22px; font-weight: 700; line-height: 1.4; color: var(--text-strong); }
+.applicant-heading.arco-typography { font-size: 20px; font-weight: 700; line-height: 1.45; color: var(--text-strong); overflow-wrap: anywhere; }
+.applicant-identity { font-size: 14px; font-weight: 400; color: var(--text-body); }
+.inbox-mobile .applicant-heading { font-size: 17px; }
+.management-description { margin: 6px 0 0; color: var(--text-body); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.review-management-panel .management-filters {
+  --filter-outer-inset: 20px;
+  margin: 0;
+  padding: 10px 20px;
+  border: 0;
+  border-top: 1px solid var(--surface-line);
+  border-radius: 0 0 var(--surface-radius) var(--surface-radius);
+}
+@media (max-width: 767px) {
+  .management-heading { padding: 12px; }
+  .review-management-panel .management-filters { --filter-outer-inset: 12px; padding: 10px 12px 12px; }
+  .management-description { margin-top: 0; }
+}
+.inbox-board:not(.inbox-mobile) {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--desktop-header-height, 58px) - 70px);
+  min-height: 0;
+  overflow: hidden;
+}
 .review-desktop { display: grid; grid-template-columns: minmax(220px, 28%) minmax(0, 1fr); align-items: start; gap: 16px; }
+.inbox-board:not(.inbox-mobile) .review-desktop {
+  flex: 1;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr);
+}
 .review-detail { min-width: 0; }
+.inbox-board:not(.inbox-mobile) .review-detail {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.inbox-board:not(.inbox-mobile) .review-detail :deep(.arco-card) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.inbox-board:not(.inbox-mobile) .review-detail :deep(.arco-card-body) {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
 .candidate-panel { position: sticky; top: var(--desktop-sticky-top); min-width: 0; border: 1px solid var(--desktop-line); border-radius: var(--radius-lg); background: var(--bg-surface); overflow: hidden; }
-.candidate-search { padding: 12px; border-bottom: 1px solid #e8edf2; }
+.inbox-board:not(.inbox-mobile) .candidate-panel {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
 .candidate-list { max-height: min(70vh, 780px); overflow-y: auto; }
+.board-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+.board-filter-label {
+  flex: none;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+.board-search { width: min(280px, 100%); }
+.board-task { width: 220px; }
+.board-search,
+.board-task :deep(.arco-select-view) {
+  height: 36px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+.board-search :deep(.arco-input),
+.board-task :deep(.arco-select-view-value),
+.board-task :deep(.arco-select-view-input) {
+  color: #111827;
+  font-size: 13px;
+}
+.board-search :deep(.arco-input::placeholder),
+.board-task :deep(.arco-select-view-input::placeholder) {
+  color: #64748b;
+}
+.board-search:hover,
+.board-search.arco-input-focus,
+.board-task :deep(.arco-select-view:hover),
+.board-task :deep(.arco-select-view.arco-select-view-focus) {
+  background: #fff;
+  border-color: #2563eb;
+}
+@media (max-width: 767px) {
+  .board-filters { flex-wrap: wrap; }
+  .board-search, .board-task { width: 100%; }
+}
+.inbox-board:not(.inbox-mobile) .candidate-list {
+  flex: 1;
+  max-height: none;
+  min-height: 0;
+}
 .candidate-item { display: grid; gap: 6px; width: 100%; padding: 14px 12px; border: 0; border-left: 3px solid transparent; border-bottom: 1px solid #edf0f4; background: #fff; text-align: left; color: inherit; font: inherit; cursor: pointer; }
 .candidate-item:hover { background: var(--bg-subtle); }
 .candidate-item[aria-pressed="true"] { border-left-color: rgb(var(--primary-6)); background: rgb(var(--primary-1)); }
 .candidate-item:focus-visible { outline: 2px solid rgb(var(--primary-6)); outline-offset: -2px; }
 .candidate-line { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
 .candidate-line strong, .candidate-task { overflow-wrap: anywhere; }
+.candidate-line strong { font-size: 15px; font-weight: 700; line-height: 1.5; }
 .candidate-task { color: #475569; font-size: 13px; }
 .candidate-item time { color: #667585; font-size: 12px; }
 
@@ -429,8 +582,8 @@ function clearTaskFilter() {
   color: var(--text-body);
 }
 .resume-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 650;
   color: #243751;
   margin-bottom: 6px;
 }

@@ -145,7 +145,7 @@ public class TaskService {
     }
 
     @Transactional(readOnly = true)
-    public PublisherTaskPage mine(String status, String roleType, int page, int size) {
+    public PublisherTaskPage mine(String status, String roleType, String keyword, int page, int size) {
         AuthUser publisher = AuthSupport.requireRole(Role.PUBLISHER);
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 50);
@@ -161,7 +161,8 @@ public class TaskService {
             }
         }
         Long publisherId = publisher.getId();
-        var result = tasks.searchMine(publisherId, roleFilter, statusFilter, PageRequest.of(safePage, safeSize));
+        String keywordFilter = blankToNull(keyword);
+        var result = tasks.searchMine(publisherId, roleFilter, statusFilter, keywordFilter, PageRequest.of(safePage, safeSize));
         List<Task> pageItems = result.getContent();
         Map<Long, Long> filledMap = new HashMap<>();
         Map<Long, Long> pendingMap = new HashMap<>();

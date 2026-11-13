@@ -30,6 +30,9 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
                     WHERE t.publisher.id = :publisherId
                       AND (:roleType IS NULL OR :roleType = '' OR t.roleType = :roleType)
                       AND (:status IS NULL OR :status = '' OR t.status = :status)
+                      AND (:keyword IS NULL OR :keyword = ''
+                           OR LOWER(t.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                           OR LOWER(t.publicCode) LIKE LOWER(CONCAT('%', :keyword, '%')))
                     ORDER BY t.id DESC
                     """,
             countQuery = """
@@ -37,12 +40,16 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
                     WHERE t.publisher.id = :publisherId
                       AND (:roleType IS NULL OR :roleType = '' OR t.roleType = :roleType)
                       AND (:status IS NULL OR :status = '' OR t.status = :status)
+                      AND (:keyword IS NULL OR :keyword = ''
+                           OR LOWER(t.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                           OR LOWER(t.publicCode) LIKE LOWER(CONCAT('%', :keyword, '%')))
                     """
     )
     Page<Task> searchMine(
             @Param("publisherId") Long publisherId,
             @Param("roleType") String roleType,
             @Param("status") String status,
+            @Param("keyword") String keyword,
             Pageable pageable
     );
 

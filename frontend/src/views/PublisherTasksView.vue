@@ -3,8 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
 import { api } from '../api'
+import TaskFilterBar from '../components/TaskFilterBar.vue'
 import { useIsMobile } from '../composables/useDevice'
-import { TASK_ROLE_LABEL, TASK_ROLE_TYPES, type Project, type PublisherTaskPage, type Task } from '../types'
+import { TASK_ROLE_LABEL, type Project, type PublisherTaskPage, type Task } from '../types'
 
 const PAGE_SIZE = 20
 const route = useRoute()
@@ -19,7 +20,6 @@ const projects = ref<Project[]>([])
 const loading = ref(false)
 const loadingMore = ref(false)
 const page = ref(0)
-const total = ref(0)
 const hasMore = ref(false)
 
 const ROLE_STORAGE_KEY = 'publisher.tasks.roleType'
@@ -57,11 +57,11 @@ function initialStatusTab(): 'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED' {
 
 const roleTab = ref<'TA' | 'INTERN' | 'RA' | 'TEAM'>(initialRoleTab())
 const statusTab = ref<'ALL' | 'OPEN' | 'DRAFT' | 'CLOSED'>(initialStatusTab())
-const roleCounts = ref({ TA: 0, INTERN: 0, RA: 0, TEAM: 0 })
+const keyword = ref('')
 const loadMoreSentinel = ref<HTMLElement | null>(null)
 let loadMoreObserver: IntersectionObserver | null = null
 let syncingQuery = false
-const showPcPager = computed(() => !isMobile.value && total.value > PAGE_SIZE)
+let keywordTimer: ReturnType<typeof setTimeout> | null = null
 
 function rememberListTabs() {
   sessionStorage.setItem(ROLE_STORAGE_KEY, roleTab.value)
@@ -124,6 +124,7 @@ const projectsByTask = computed(() => {
 })
 
 const emptyDescription = computed(() => {
+  if (keyword.value.trim()) return '没有匹配的任务，换个关键词试试'
   const role = TASK_ROLE_LABEL[roleTab.value] || roleTab.value
   if (statusTab.value === 'OPEN') return `暂无已发布的${role}`
   if (statusTab.value === 'DRAFT') return `暂无${role}草稿`
@@ -147,24 +148,19 @@ async function fetchPage(nextPage: number, append: boolean) {
     roleType: roleTab.value,
   })
   if (status) qs.set('status', status)
+  const query = keyword.value.trim()
+  if (query) qs.set('keyword', query)
   const result = await api<PublisherTaskPage>(`/api/v1/publisher/tasks?${qs}`)
   tasks.value = append ? [...tasks.value, ...result.items] : result.items
   page.value = result.page
-  total.value = result.total
   hasMore.value = result.hasMore
-  roleCounts.value = {
-    TA: result.totalTa,
-    INTERN: result.totalIntern,
-    RA: result.totalRa,
-    TEAM: result.totalTeam,
-  }
+
 }
 
 async function load(reset = true) {
   if (reset) {
     loading.value = true
     page.value = 0
-    total.value = 0
     hasMore.value = false
   }
   try {
@@ -179,7 +175,7 @@ async function load(reset = true) {
 }
 
 async function loadMore() {
-  if (!isMobile.value || loading.value || loadingMore.value || !hasMore.value) return
+  if (loading.value || loadingMore.value || !hasMore.value) return
   loadingMore.value = true
   try {
     await fetchPage(page.value + 1, true)
@@ -187,33 +183,26 @@ async function loadMore() {
     Message.error(cause instanceof Error ? cause.message : '加载更多失败')
   } finally {
     loadingMore.value = false
-  }
-}
-
-async function onPcPageChange(current: number) {
-  if (isMobile.value) return
-  loading.value = true
-  try {
-    await fetchPage(Math.max(current - 1, 0), false)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  } catch (cause) {
-    Message.error(cause instanceof Error ? cause.message : '翻页失败')
-  } finally {
-    loading.value = false
+    await nextTick()
+    bindLoadMore()
   }
 }
 
 function bindLoadMore() {
   loadMoreObserver?.disconnect()
   loadMoreObserver = null
-  if (!isMobile.value) return
   const el = loadMoreSentinel.value
-  if (!el) return
+  if (!el || !hasMore.value) return
+  const root = el.parentElement?.classList.contains('desktop-list') ? el.parentElement : null
   loadMoreObserver = new IntersectionObserver(
     (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadMore()
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      if (loading.value || loadingMore.value || !hasMore.value) return
+      loadMoreObserver?.disconnect()
+      loadMoreObserver = null
+      void loadMore()
     },
-    { root: null, rootMargin: '240px 0px', threshold: 0 },
+    { root, rootMargin: '160px 0px', threshold: 0 },
   )
   loadMoreObserver.observe(el)
 }
@@ -222,6 +211,13 @@ watch(statusTab, () => {
   if (syncingQuery) return
   syncListQuery()
   void load(true)
+})
+
+watch(keyword, () => {
+  if (keywordTimer) clearTimeout(keywordTimer)
+  keywordTimer = setTimeout(() => {
+    void load(true)
+  }, 300)
 })
 
 watch(roleTab, () => {
@@ -257,6 +253,7 @@ onMounted(() => {
 onUnmounted(() => {
   loadMoreObserver?.disconnect()
   loadMoreObserver = null
+  if (keywordTimer) clearTimeout(keywordTimer)
 })
 
 async function act(id: number, action: 'publish' | 'close') {
@@ -300,11 +297,12 @@ function openInbox(taskId?: number) {
 </script>
 
 <template>
-  <section :class="{ 'publisher-mobile': isMobile }">
-    <header class="page-head">
+  <section class="publisher-board" :class="{ 'publisher-mobile': isMobile }">
+    <section class="task-management-panel" aria-label="任务管理与筛选">
+    <header class="management-heading">
       <div v-if="!isMobile">
         <a-typography-title :heading="4" style="margin: 0">我的任务</a-typography-title>
-        <p class="subtitle">查看待审申请与已入项学生；草稿与已下架可删除。</p>
+        <p class="management-description">管理任务、审阅申请，查看已入项学生</p>
       </div>
       <a-space wrap>
         <a-button size="small" @click="openInbox()">全部申请</a-button>
@@ -318,33 +316,21 @@ function openInbox(taskId?: number) {
       </a-space>
     </header>
 
-    <nav class="role-tabs" :class="{ compact: isMobile }" aria-label="任务类型">
-      <button
-        v-for="item in TASK_ROLE_TYPES"
-        :key="item.value"
-        type="button"
-        class="role-tab"
-        :class="{ active: roleTab === item.value }"
-        @click="roleTab = item.value"
-      >
-        <span class="role-name">{{ isMobile ? item.shortLabel : item.label }}</span>
-        <span class="role-count">{{ roleCounts[item.value] }}</span>
-      </button>
-    </nav>
+    <TaskFilterBar class="management-filters" :model-value="roleTab" @update:model-value="value => { if (value) roleTab = value }">
+      <a-input v-model="keyword" allow-clear size="medium" aria-label="搜索任务" placeholder="搜索任务标题或编号">
+        <template #prefix><icon-search aria-hidden="true" /></template>
+      </a-input>
+      <a-select v-model="statusTab" size="medium" aria-label="发布状态">
+        <a-option value="ALL">全部状态</a-option>
+        <a-option value="OPEN">已发布</a-option>
+        <a-option value="DRAFT">草稿</a-option>
+        <a-option value="CLOSED">已下架</a-option>
+      </a-select>
+      <a-button v-if="keyword || statusTab !== 'ALL'" type="text" @click="keyword = ''; statusTab = 'ALL'">清空</a-button>
+    </TaskFilterBar>
+    </section>
 
-    <a-tabs
-      v-model:active-key="statusTab"
-      type="rounded"
-      :size="isMobile ? 'medium' : 'large'"
-      class="status-tabs"
-    >
-      <a-tab-pane key="ALL" title="全部" />
-      <a-tab-pane key="OPEN" title="已发布" />
-      <a-tab-pane key="DRAFT" title="草稿" />
-      <a-tab-pane key="CLOSED" title="已下架" />
-    </a-tabs>
-
-    <a-spin :loading="loading" style="width: 100%">
+    <a-spin :loading="loading" class="board-spin">
       <a-empty v-if="!loading && tasks.length === 0" :description="emptyDescription" />
       <div v-else class="stack">
         <div :class="{ 'desktop-split': !isMobile }">
@@ -355,70 +341,47 @@ function openInbox(taskId?: number) {
             <span>{{ statusLabel[task.status] || task.status }} · 已入项 {{ task.filled }}/{{ task.quota }}</span>
             <span v-if="task.pendingApplications">待审 {{ task.pendingApplications }}</span>
           </button>
+          <div
+            v-if="tasks.length || hasMore"
+            ref="loadMoreSentinel"
+            class="load-more-sentinel"
+            aria-hidden="true"
+          />
+          <div v-if="loadingMore" class="load-more-status in-list">加载更多…</div>
+          <div v-else-if="tasks.length && !hasMore" class="load-more-status in-list muted">已经到底了</div>
         </nav>
         <div class="stack desktop-detail">
         <a-card v-for="task in displayedTasks" :key="task.id" class="task-card">
           <div class="task-body">
-            <template v-if="isMobile">
-              <div class="mobile-task-heading">
-                <h2>{{ task.title }}</h2>
-                <a-tag :color="statusColor[task.status] || 'gray'" size="small">
-                  {{ statusLabel[task.status] || task.status }}
-                </a-tag>
-              </div>
-              <div class="mobile-task-meta">
-                <p class="mobile-task-identity">
-                  <strong>{{ task.roleType === 'INTERN' ? '开发实习' : (TASK_ROLE_LABEL[task.roleType] || task.roleType) }}</strong>
-                  <span v-if="task.publicCode">{{ task.publicCode }}</span>
-                </p>
-                <p v-if="task.roleType === 'INTERN' || (task.roleType !== 'TA' && task.roleType !== 'TEAM' && task.techField)">
-                  {{ [
-                    task.techField,
-                    task.roleType === 'INTERN' && task.difficulty && `难度 ${task.difficulty}`,
-                    task.roleType === 'INTERN' && task.programmingLanguages?.replace(/\s*[,，]\s*/g, ' / '),
-                  ].filter(Boolean).join(' · ') }}
-                </p>
-                <ul v-if="task.roleType === 'TEAM' && task.positions?.length" class="mobile-task-positions">
-                  <li v-for="position in task.positions" :key="position.id">{{ position.title }} {{ position.filled }}/{{ position.quota }}</li>
-                </ul>
-              </div>
-              <div class="mobile-task-summary">
-                <span>已入项 <strong>{{ task.filled }}/{{ task.quota }}</strong></span>
-                <span v-if="(task.roleType === 'INTERN' || task.roleType === 'TEAM') && task.durationWeeks">
-                  周期 <strong>{{ task.durationWeeks }} 周</strong>
-                </span>
-                <span v-if="task.stipendText">补助 <strong>{{ task.stipendText }}</strong></span>
-              </div>
-            </template>
-            <template v-else>
-            <a-space wrap style="margin-bottom: 8px">
-              <a-tag size="small">{{ task.publicCode }}</a-tag>
-              <a-tag color="arcoblue" size="small">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
-              <a-tag v-if="task.roleType !== 'TA' && task.roleType !== 'TEAM'" size="small">{{ task.techField }}</a-tag>
-              <a-tag
-                v-for="pos in task.roleType === 'TEAM' ? task.positions || [] : []"
-                :key="pos.id"
-                size="small"
-              >
-                {{ pos.title }} {{ pos.filled }}/{{ pos.quota }}
-              </a-tag>
-              <a-tag v-if="task.roleType === 'INTERN'" size="small">{{ task.difficulty }}</a-tag>
+            <div class="task-heading">
+              <h2>{{ task.title }}</h2>
               <a-tag :color="statusColor[task.status] || 'gray'" size="small">
                 {{ statusLabel[task.status] || task.status }}
               </a-tag>
-              <a-tag v-if="(task.pendingApplications || 0) > 0" color="orange" size="small">
-                待审 {{ task.pendingApplications }}
-              </a-tag>
-            </a-space>
-            <a-typography-title :heading="6" style="margin: 0 0 4px">{{ task.title }}</a-typography-title>
-            <a-typography-text type="secondary">
-              已入项 {{ task.filled }}/{{ task.quota }}
-              <template v-if="(task.pendingApplications || 0) > 0"> · 待审申请 {{ task.pendingApplications }}</template>
-              <template v-if="task.roleType === 'INTERN'"> · {{ task.programmingLanguages }} · {{ task.durationWeeks }} 周</template>
-              <template v-if="task.roleType === 'TEAM'"> · {{ task.durationWeeks }} 周</template>
-              <template v-if="task.stipendText"> · {{ task.stipendText }}</template>
-            </a-typography-text>
-            </template>
+            </div>
+            <div class="task-meta">
+              <p class="task-identity">
+                <strong>{{ task.roleType === 'INTERN' ? '开发实习' : (TASK_ROLE_LABEL[task.roleType] || task.roleType) }}</strong>
+                <span v-if="task.publicCode">{{ task.publicCode }}</span>
+              </p>
+              <p v-if="task.roleType === 'INTERN' || (task.roleType !== 'TA' && task.roleType !== 'TEAM' && task.techField)">
+                {{ [
+                  task.techField,
+                  task.roleType === 'INTERN' && task.difficulty && `难度 ${task.difficulty}`,
+                  task.roleType === 'INTERN' && task.programmingLanguages?.replace(/\s*[,，]\s*/g, ' / '),
+                ].filter(Boolean).join(' · ') }}
+              </p>
+              <ul v-if="task.roleType === 'TEAM' && task.positions?.length" class="task-positions">
+                <li v-for="position in task.positions" :key="position.id">{{ position.title }} {{ position.filled }}/{{ position.quota }}</li>
+              </ul>
+            </div>
+            <div class="task-summary">
+              <span>已入项 <strong>{{ task.filled }}/{{ task.quota }}</strong></span>
+              <span v-if="(task.roleType === 'INTERN' || task.roleType === 'TEAM') && task.durationWeeks">
+                周期 <strong>{{ task.durationWeeks }} 周</strong>
+              </span>
+              <span v-if="task.stipendText">补助 <strong>{{ task.stipendText }}</strong></span>
+            </div>
 
             <div v-if="(projectsByTask.get(task.id) || []).length" class="enrolled">
               <div class="enrolled-title">已接收学生</div>
@@ -441,7 +404,7 @@ function openInbox(taskId?: number) {
               </div>
             </div>
             <div v-else-if="!isMobile && task.status === 'OPEN'" class="enrolled empty-hint">
-              暂无学生入项；有人申请后会出现在「审阅」，通过后显示在这里。
+              暂无学生入项
             </div>
           </div>
 
@@ -507,21 +470,44 @@ function openInbox(taskId?: number) {
         />
         <div v-if="isMobile && loadingMore" class="load-more-status">加载更多…</div>
         <div v-else-if="isMobile && tasks.length && !hasMore" class="load-more-status muted">已经到底了</div>
-        <div v-if="showPcPager" class="pager">
-          <a-pagination
-            :total="total"
-            :current="page + 1"
-            :page-size="PAGE_SIZE"
-            show-total
-            @change="onPcPageChange"
-          />
-        </div>
       </div>
     </a-spin>
   </section>
 </template>
 
 <style scoped>
+.task-management-panel {
+  margin-bottom: 16px;
+  padding: 0;
+  border: 1px solid var(--surface-line);
+  border-radius: var(--surface-radius);
+  background: var(--bg-surface);
+}
+.management-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px 20px 16px;
+  background: var(--heading-surface);
+  border-radius: var(--surface-radius) var(--surface-radius) 0 0;
+}
+.management-heading :deep(.arco-typography) { font-size: 22px; font-weight: 700; line-height: 1.4; color: var(--text-strong); }
+.desktop-list-item strong { font-size: 15px; font-weight: 700; line-height: 1.5; }
+.management-description { margin: 6px 0 0; color: var(--text-body); font-size: 13px; line-height: 1.5; }
+.task-management-panel .management-filters {
+  --filter-outer-inset: 20px;
+  margin: 0;
+  padding: 10px 20px;
+  border: 0;
+  border-top: 1px solid var(--surface-line);
+  border-radius: 0 0 var(--surface-radius) var(--surface-radius);
+}
+@media (max-width: 767px) {
+  .management-heading { justify-content: flex-end; padding: 12px; }
+  .task-management-panel .management-filters { --filter-outer-inset: 12px; padding: 10px 12px 12px; }
+}
 .role-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -591,6 +577,10 @@ function openInbox(taskId?: number) {
 .status-tabs {
   margin: 4px 0 14px;
 }
+.status-tabs :deep(.arco-tabs-nav),
+.status-tabs :deep(.arco-tabs-nav-tab) {
+  background: transparent;
+}
 .status-tabs :deep(.arco-tabs-nav-tab) {
   flex: 1;
   justify-content: space-between;
@@ -598,12 +588,30 @@ function openInbox(taskId?: number) {
 .status-tabs :deep(.arco-tabs-nav-tab-list) {
   display: flex;
   width: 100%;
+  gap: 10px;
 }
 .status-tabs :deep(.arco-tabs-tab) {
   flex: 1;
   justify-content: center;
+  height: 36px;
   margin: 0;
-  padding: 0 8px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #1e293b;
+  font-weight: 650;
+}
+.status-tabs :deep(.arco-tabs-tab:hover) {
+  border-color: #93c5fd;
+  background: #fff;
+  color: #1d4ed8;
+}
+.status-tabs :deep(.arco-tabs-tab-active),
+.status-tabs :deep(.arco-tabs-tab-active:hover) {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 .task-card {
   border: 1px solid #eef2f7;
@@ -695,15 +703,15 @@ function openInbox(taskId?: number) {
 }
 .publisher-mobile .task-card { border-radius: var(--mobile-radius); }
 .publisher-mobile .task-card :deep(.arco-card-body) { padding: 14px; gap: 12px; }
-.mobile-task-heading {
+.task-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
 }
-.mobile-task-heading h2 { min-width: 0; font-size: 17px; overflow-wrap: anywhere; }
-.mobile-task-heading :deep(.arco-tag) { flex: none; }
-.mobile-task-summary {
+.task-heading h2 { min-width: 0; font-size: 17px; font-weight: 700; line-height: 1.45; color: var(--text-strong); overflow-wrap: anywhere; }
+.task-heading :deep(.arco-tag) { flex: none; }
+.task-summary {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 12px;
@@ -712,7 +720,7 @@ function openInbox(taskId?: number) {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
-.mobile-task-meta {
+.task-meta {
   display: grid;
   gap: 4px;
   margin-top: 6px;
@@ -720,12 +728,12 @@ function openInbox(taskId?: number) {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-.mobile-task-identity { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-.mobile-task-identity strong { color: rgb(var(--primary-6)); font-weight: 650; }
-.mobile-task-identity span { color: #64748b; font-size: 12px; }
-.mobile-task-positions { margin: 0; padding-inline-start: 18px; }
-.mobile-task-summary { font-size: 13px; }
-.mobile-task-summary strong { color: #1f2937; font-weight: 650; }
+.task-identity { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.task-identity strong { color: rgb(var(--primary-6)); font-weight: 650; }
+.task-identity span { color: #64748b; font-size: 12px; }
+.task-positions { margin: 0; padding-inline-start: 18px; }
+.task-summary { font-size: 13px; }
+.task-summary strong { color: #1f2937; font-weight: 700; font-variant-numeric: tabular-nums; }
 .publisher-mobile .task-footer { flex-direction: row; align-items: stretch; gap: 8px; padding-top: 10px; }
 .publisher-mobile .actions-primary { width: auto; flex: 1 0 auto; margin-left: auto; }
 .publisher-mobile :is(.actions-primary, .actions-manage) :deep(.arco-btn) { min-height: 44px; }
@@ -742,10 +750,72 @@ function openInbox(taskId?: number) {
 .load-more-status.muted {
   color: #9ca3af;
 }
-.pager {
+.load-more-status.in-list {
+  margin-top: auto;
+  padding: 14px 12px 16px;
+  border-top: 1px solid #edf0f4;
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: center;
+}
+.board-filters {
   display: flex;
-  justify-content: flex-end;
-  padding: 8px 0 4px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.board-filter-label {
+  flex: none;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+.board-search {
+  width: min(360px, 100%);
+  height: 36px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+.board-search :deep(.arco-input) {
+  color: #111827;
+  font-size: 13px;
+}
+.board-search :deep(.arco-input::placeholder) {
+  color: #64748b;
+}
+.board-search:hover,
+.board-search.arco-input-focus {
+  background: #fff;
+  border-color: #2563eb;
+}
+.publisher-board:not(.publisher-mobile) .board-filters {
+  display: grid;
+  grid-template-columns: 154px 126px minmax(0, 360px);
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--surface-radius);
+}
+.board-select,
+.publisher-board:not(.publisher-mobile) .board-search {
+  width: 100%;
+  min-width: 0;
+}
+.board-spin { width: 100%; }
+.publisher-board:not(.publisher-mobile) .desktop-split { align-items: start; }
+.publisher-board:not(.publisher-mobile) .desktop-list {
+  max-height: max(240px, calc(100dvh - var(--desktop-header-height, 58px) - 180px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.publisher-board:not(.publisher-mobile) .desktop-list-item { padding-block: 11px; }
+.publisher-board:not(.publisher-mobile) .task-heading h2 { font-size: 20px; }
+.publisher-board:not(.publisher-mobile) .empty-hint {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-body);
 }
 @media (max-width: 700px) {
   .task-footer {

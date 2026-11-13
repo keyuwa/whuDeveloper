@@ -66,10 +66,11 @@ public class TaskController {
     public PublisherTaskPage mine(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String roleType,
+            @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return tasks.mine(status, roleType, page, size);
+        return tasks.mine(status, roleType, keyword, page, size);
     }
 
     @PostMapping("/publisher/tasks")
