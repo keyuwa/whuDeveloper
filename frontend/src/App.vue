@@ -104,7 +104,6 @@ const menus = computed(() => {
 })
 
 const studentTabs: TabItem[] = [
-  { key: '/', label: '首页', icon: 'topdev', match: (path) => path === '/' || path.startsWith('/ability') },
   { key: '/plaza', label: '职位', icon: 'jobs', match: (path) => path === '/plaza' || path.startsWith('/tasks/') },
   {
     key: '/me/workbench',
@@ -122,7 +121,6 @@ const studentTabs: TabItem[] = [
 ]
 
 const publisherTabs = computed<TabItem[]>(() => [
-  { key: '/', label: '首页', icon: 'topdev', match: (path) => path === '/' || path.startsWith('/ability') },
   { key: '/plaza', label: '职位', icon: 'jobs', match: (path) => path === '/plaza' || path.startsWith('/tasks/') },
   { key: '/publisher/tasks', label: '任务', icon: 'tasks', match: (path) => path.startsWith('/publisher/tasks') },
   {
@@ -134,7 +132,6 @@ const publisherTabs = computed<TabItem[]>(() => [
 ])
 
 const guestTabs: TabItem[] = [
-  { key: '/', label: '首页', icon: 'topdev', match: (path) => path === '/' || path.startsWith('/ability') },
   { key: '/plaza', label: '职位', icon: 'jobs', match: (path) => path === '/plaza' || path.startsWith('/tasks/') },
   { key: '/auth/login', label: '登录', icon: 'login', match: (path) => path.startsWith('/auth') },
 ]
@@ -144,7 +141,6 @@ const mobileTabs = computed(() => {
   if (user.value?.role === 'PUBLISHER') return publisherTabs.value
   if (user.value?.role === 'ADMIN') {
     return [
-      { key: '/', label: '首页', icon: 'topdev' as const, match: (path: string) => path === '/' || path.startsWith('/ability') },
       { key: '/plaza', label: '广场', icon: 'jobs' as const, match: (path: string) => path === '/plaza' || path.startsWith('/tasks/') },
       { key: '/admin/dicts', label: '字典', icon: 'tasks' as const, match: (path: string) => path.startsWith('/admin/dicts') },
       { key: '/admin/users', label: '用户', icon: 'users' as const, match: (path: string) => path.startsWith('/admin/users') },
@@ -322,17 +318,27 @@ async function loadSiteConfig() {
 onMounted(() => {
   refreshUnread()
   void loadSiteConfig()
+  if (isMobile.value && (route.path === '/' || route.path === '/ability')) {
+    void router.replace('/plaza')
+  }
 })
 watch(() => auth.token, refreshUnread)
 watch(
   () => route.path,
   (path) => {
+    if (isMobile.value && (path === '/' || path === '/ability')) {
+      void router.replace('/plaza')
+      return
+    }
     if (path === '/' || path === '/plaza') void loadSiteConfig()
     if (!drawerVisible.value) refreshUnread()
   },
 )
 watch(isMobile, (mobile) => {
   document.documentElement.classList.toggle('is-mobile', mobile)
+  if (mobile && (route.path === '/' || route.path.startsWith('/ability'))) {
+    void router.replace('/plaza')
+  }
 })
 
 function publisherTasksTarget() {
