@@ -322,7 +322,6 @@ function scheduleLabel(task: Task) {
 }
 
 function seatLabel(task: Task) {
-  if (task.filled <= 0) return '—'
   return `${task.filled}/${task.quota}`
 }
 
