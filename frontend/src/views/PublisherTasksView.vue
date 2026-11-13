@@ -359,6 +359,38 @@ function openInbox(taskId?: number) {
         <div class="stack desktop-detail">
         <a-card v-for="task in displayedTasks" :key="task.id" class="task-card">
           <div class="task-body">
+            <template v-if="isMobile">
+              <div class="mobile-task-heading">
+                <h2>{{ task.title }}</h2>
+                <a-tag :color="statusColor[task.status] || 'gray'" size="small">
+                  {{ statusLabel[task.status] || task.status }}
+                </a-tag>
+              </div>
+              <div class="mobile-task-meta">
+                <p class="mobile-task-identity">
+                  <strong>{{ task.roleType === 'INTERN' ? '开发实习' : (TASK_ROLE_LABEL[task.roleType] || task.roleType) }}</strong>
+                  <span v-if="task.publicCode">{{ task.publicCode }}</span>
+                </p>
+                <p v-if="task.roleType === 'INTERN' || (task.roleType !== 'TA' && task.roleType !== 'TEAM' && task.techField)">
+                  {{ [
+                    task.techField,
+                    task.roleType === 'INTERN' && task.difficulty && `难度 ${task.difficulty}`,
+                    task.roleType === 'INTERN' && task.programmingLanguages?.replace(/\s*[,，]\s*/g, ' / '),
+                  ].filter(Boolean).join(' · ') }}
+                </p>
+                <ul v-if="task.roleType === 'TEAM' && task.positions?.length" class="mobile-task-positions">
+                  <li v-for="position in task.positions" :key="position.id">{{ position.title }} {{ position.filled }}/{{ position.quota }}</li>
+                </ul>
+              </div>
+              <div class="mobile-task-summary">
+                <span>已入项 <strong>{{ task.filled }}/{{ task.quota }}</strong></span>
+                <span v-if="(task.roleType === 'INTERN' || task.roleType === 'TEAM') && task.durationWeeks">
+                  周期 <strong>{{ task.durationWeeks }} 周</strong>
+                </span>
+                <span v-if="task.stipendText">补助 <strong>{{ task.stipendText }}</strong></span>
+              </div>
+            </template>
+            <template v-else>
             <a-space wrap style="margin-bottom: 8px">
               <a-tag size="small">{{ task.publicCode }}</a-tag>
               <a-tag color="arcoblue" size="small">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
@@ -386,6 +418,7 @@ function openInbox(taskId?: number) {
               <template v-if="task.roleType === 'TEAM'"> · {{ task.durationWeeks }} 周</template>
               <template v-if="task.stipendText"> · {{ task.stipendText }}</template>
             </a-typography-text>
+            </template>
 
             <div v-if="(projectsByTask.get(task.id) || []).length" class="enrolled">
               <div class="enrolled-title">已接收学生</div>
@@ -407,7 +440,7 @@ function openInbox(taskId?: number) {
                 </a-button>
               </div>
             </div>
-            <div v-else-if="task.status === 'OPEN'" class="enrolled empty-hint">
+            <div v-else-if="!isMobile && task.status === 'OPEN'" class="enrolled empty-hint">
               暂无学生入项；有人申请后会出现在「审阅」，通过后显示在这里。
             </div>
           </div>
@@ -660,6 +693,42 @@ function openInbox(taskId?: number) {
   margin-top: 12px;
   width: 100%;
 }
+.publisher-mobile .task-card { border-radius: var(--mobile-radius); }
+.publisher-mobile .task-card :deep(.arco-card-body) { padding: 14px; gap: 12px; }
+.mobile-task-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mobile-task-heading h2 { min-width: 0; font-size: 17px; overflow-wrap: anywhere; }
+.mobile-task-heading :deep(.arco-tag) { flex: none; }
+.mobile-task-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 8px;
+  color: #475569;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.mobile-task-meta {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  color: #475569;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.mobile-task-identity { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.mobile-task-identity strong { color: rgb(var(--primary-6)); font-weight: 650; }
+.mobile-task-identity span { color: #64748b; font-size: 12px; }
+.mobile-task-positions { margin: 0; padding-inline-start: 18px; }
+.mobile-task-summary { font-size: 13px; }
+.mobile-task-summary strong { color: #1f2937; font-weight: 650; }
+.publisher-mobile .task-footer { flex-direction: row; align-items: stretch; gap: 8px; padding-top: 10px; }
+.publisher-mobile .actions-primary { width: auto; flex: 1 0 auto; margin-left: auto; }
+.publisher-mobile :is(.actions-primary, .actions-manage) :deep(.arco-btn) { min-height: 44px; }
 .load-more-sentinel {
   height: 1px;
   width: 100%;

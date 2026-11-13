@@ -409,7 +409,7 @@ onMounted(() => {
 }
 .role-tabs.compact .role-tab.active {
   border-color: #2563eb;
-  background: linear-gradient(180deg, #eff6ff 0%, #fff 70%);
+  background: var(--heading-surface);
   box-shadow: 0 6px 18px rgba(37, 99, 235, 0.1);
 }
 .role-tabs.compact .role-name { font-size: 13px; white-space: nowrap; }
@@ -425,7 +425,7 @@ onMounted(() => {
 .task-card-link + .task-card-link { border-top: 0; }
 .work-card {
   border: 1px solid #eef2f7 !important;
-  border-radius: 16px !important;
+  border-radius: var(--surface-radius);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   background: #fff;
 }
@@ -465,5 +465,8 @@ onMounted(() => {
 .workbench-mobile :deep(.arco-tabs-nav-tab) {
   font-size: 13px;
 }
+.workbench-mobile .workspace-tabs { margin-top: 8px; }
+.workbench-mobile .role-tabs.compact .role-tab { min-height: 44px; }
+.workbench-mobile .work-card { border-radius: var(--mobile-radius); }
 @media (max-width: 600px) { .work-card :deep(.arco-card-body) { padding: 18px; display: block; }.card-foot { margin-top: 16px; }.candidate-actions { align-items: flex-start; }.page-head { align-items: flex-start; }.subtitle { max-width: 220px; } }
 </style>

@@ -275,48 +275,47 @@ function clearTaskFilter() {
           <template v-if="item.positionTitle"> · {{ item.positionTitle }}</template>
           <template v-if="isChallenge(item)"> · 科研方案</template>
         </a-typography-paragraph>
-        <div v-if="aiLabel(item)" class="ai-box">
-          <div class="resume-title">
-            AI 可行性初判
-            <a-tag size="small" color="purple" style="margin-left: 8px">{{ aiLabel(item) }}</a-tag>
-            <a-tag
-              v-if="parseAiDetail(item)?.feasibilityLabel"
-              size="small"
-              :color="feasibilityTagColor(parseAiDetail(item)?.feasibilityLabel)"
-              style="margin-left: 6px"
-            >
-              {{ parseAiDetail(item)?.feasibilityLabel }}
-            </a-tag>
-          </div>
-          <p v-if="item.aiSummary">{{ item.aiSummary }}</p>
-          <div v-if="parseAiDetail(item) && item.aiStatus === 'DONE'" class="ai-dims">
-            <span>完整 {{ parseAiDetail(item)?.completeness ?? '—' }}</span>
-            <span>匹配 {{ parseAiDetail(item)?.fit ?? '—' }}</span>
-            <span>可行 {{ parseAiDetail(item)?.feasibility ?? '—' }}</span>
-            <span>依据 {{ parseAiDetail(item)?.evidence ?? '—' }}</span>
-          </div>
-          <p v-if="parseAiDetail(item)?.risks" class="ai-risk">风险：{{ parseAiDetail(item)?.risks }}</p>
-          <p v-if="item.aiStatus === 'SKIPPED' && item.aiSummary" class="ai-risk">{{ item.aiSummary }}</p>
-          <p class="ai-hint">仅供参考，揭榜仍由你人工决定。</p>
-          <div v-if="canRescoreAi(item)" style="margin-top: 8px">
-            <a-button size="mini" :loading="loading" @click="rescoreAi(item.id)">重新 AI 初判</a-button>
-          </div>
-        </div>
-        <div v-if="item.school || item.college || item.major || item.bio" class="resume-box">
-          <div class="resume-title">学生简历</div>
-          <p v-if="item.school || item.college || item.major">
-            {{ [item.school, item.college, item.major].filter(Boolean).join(' · ') }}
-          </p>
-          <pre v-if="item.bio" class="md">{{ item.bio }}</pre>
-          <a v-if="item.resumeFileUrl" :href="item.resumeFileUrl" target="_blank" rel="noopener">
-            {{ item.resumeFileName || '查看简历 PDF' }}
-          </a>
-        </div>
         <div class="review-layout">
           <div class="review-material">
-            <div class="resume-title" style="margin-top: 12px">{{ isChallenge(item) ? '方案内容' : '申请内容' }}</div>
+            <div class="resume-title">{{ isChallenge(item) ? '方案内容' : '申请内容' }}</div>
             <article v-if="item.proposalMd" class="md-body proposal-view" v-html="renderMarkdown(item.proposalMd)" />
-            <ProposalFile v-if="item.proposalFileName" :application-id="item.id" :file-name="item.proposalFileName" preview :inline="!isMobile" />
+            <ProposalFile v-if="item.proposalFileName" :application-id="item.id" :file-name="item.proposalFileName" preview :inline="!isMobile" :compact="isMobile" />
+            <details v-if="aiLabel(item)" class="ai-box" :open="!isMobile">
+              <summary class="resume-title review-summary">
+                AI 可行性初判
+                <a-tag size="small" color="arcoblue" style="margin-left: 8px">{{ aiLabel(item) }}</a-tag>
+                <a-tag
+                  v-if="parseAiDetail(item)?.feasibilityLabel"
+                  size="small"
+                  :color="feasibilityTagColor(parseAiDetail(item)?.feasibilityLabel)"
+                  style="margin-left: 6px"
+                >
+                  {{ parseAiDetail(item)?.feasibilityLabel }}
+                </a-tag>
+              </summary>
+              <p v-if="item.aiSummary">{{ item.aiSummary }}</p>
+              <div v-if="parseAiDetail(item) && item.aiStatus === 'DONE'" class="ai-dims">
+                <span>完整 {{ parseAiDetail(item)?.completeness ?? '—' }}</span>
+                <span>匹配 {{ parseAiDetail(item)?.fit ?? '—' }}</span>
+                <span>可行 {{ parseAiDetail(item)?.feasibility ?? '—' }}</span>
+                <span>依据 {{ parseAiDetail(item)?.evidence ?? '—' }}</span>
+              </div>
+              <p v-if="parseAiDetail(item)?.risks" class="ai-risk">风险：{{ parseAiDetail(item)?.risks }}</p>
+              <p class="ai-hint">仅供参考，揭榜仍由你人工决定。</p>
+              <div v-if="canRescoreAi(item)" style="margin-top: 8px">
+                <a-button size="mini" :loading="loading" @click="rescoreAi(item.id)">重新 AI 初判</a-button>
+              </div>
+            </details>
+            <details v-if="item.school || item.college || item.major || item.bio || item.resumeFileUrl" class="resume-box" :open="!isMobile">
+              <summary class="resume-title">学生简历</summary>
+              <p v-if="item.school || item.college || item.major">
+                {{ [item.school, item.college, item.major].filter(Boolean).join(' · ') }}
+              </p>
+              <pre v-if="item.bio" class="md">{{ item.bio }}</pre>
+              <a v-if="item.resumeFileUrl" :href="item.resumeFileUrl" target="_blank" rel="noopener">
+                {{ item.resumeFileName || '查看简历 PDF' }}
+              </a>
+            </details>
           </div>
           <div class="review-controls">
             <a-button
@@ -377,7 +376,7 @@ function clearTaskFilter() {
 .candidate-search { padding: 12px; border-bottom: 1px solid #e8edf2; }
 .candidate-list { max-height: min(70vh, 780px); overflow-y: auto; }
 .candidate-item { display: grid; gap: 6px; width: 100%; padding: 14px 12px; border: 0; border-left: 3px solid transparent; border-bottom: 1px solid #edf0f4; background: #fff; text-align: left; color: inherit; font: inherit; cursor: pointer; }
-.candidate-item:hover { background: #f6f8fb; }
+.candidate-item:hover { background: var(--bg-subtle); }
 .candidate-item[aria-pressed="true"] { border-left-color: rgb(var(--primary-6)); background: rgb(var(--primary-1)); }
 .candidate-item:focus-visible { outline: 2px solid rgb(var(--primary-6)); outline-offset: -2px; }
 .candidate-line { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
@@ -393,7 +392,7 @@ function clearTaskFilter() {
 .resume-box {
   margin: 10px 0 6px;
   padding: 12px 14px;
-  background: #f6f8fb;
+  background: var(--bg-subtle);
   border-radius: 6px;
   font-size: 13px;
   line-height: 1.7;
@@ -402,17 +401,17 @@ function clearTaskFilter() {
 .ai-box {
   margin: 10px 0 6px;
   padding: 12px 14px;
-  background: #f5f3ff;
-  border: 1px dashed #c4b5fd;
+  background: var(--bg-subtle);
+  border: 1px solid var(--surface-line);
   border-radius: 6px;
   font-size: 13px;
   line-height: 1.6;
-  color: #4c1d95;
+  color: var(--text-body);
 }
 .ai-hint {
   margin: 6px 0 0;
   font-size: 12px;
-  color: #7c3aed;
+  color: var(--text-body);
   opacity: 0.85;
 }
 .ai-dims {
@@ -422,12 +421,12 @@ function clearTaskFilter() {
   margin-top: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: #5b21b6;
+  color: var(--text-strong);
 }
 .ai-risk {
   margin: 8px 0 0;
   font-size: 12px;
-  color: #6d28d9;
+  color: var(--text-body);
 }
 .resume-title {
   font-size: 13px;
@@ -466,9 +465,22 @@ function clearTaskFilter() {
   margin-bottom: 12px;
 }
 .inbox-mobile .action-row {
-  flex-direction: column;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
+.inbox-mobile .action-row :deep(.arco-btn) { width: 100%; min-height: 44px; }
+.inbox-mobile .action-row :deep(.arco-space-item) { flex: 1; }
+.inbox-mobile .review-controls { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e8edf5; }
+.inbox-mobile :is(.ai-box, .resume-box) {
+  padding: 10px 12px;
+  border: 1px solid #e8edf5;
+  background: #f8fafc;
+  color: #334155;
+}
+.inbox-mobile details:not([open]) .resume-title { margin-bottom: 0; }
+.review-summary { overflow-wrap: anywhere; }
+.review-material summary { cursor: pointer; }
 .inbox-mobile .accepted-box {
   flex-direction: column;
   align-items: stretch;

@@ -8,7 +8,7 @@ import { auth } from '../auth'
 import { useIsMobile } from '../composables/useDevice'
 import { loadDicts, dictOptions, scheduleLabelMap } from '../composables/useDicts'
 import { readCachedSiteConfig, writeCachedSiteConfig } from '../siteConfigCache'
-import { TASK_ROLE_LABEL, TASK_ROLE_TYPES, type Task, type TaskPage } from '../types'
+import { TASK_ROLE_TYPES, type Task, type TaskPage } from '../types'
 
 defineOptions({ name: 'PlazaView' })
 
@@ -312,10 +312,6 @@ function removeChip(chip: SelectedChip) {
   if (index >= 0) list.splice(index, 1)
 }
 
-function taskCode(task: Task) {
-  return task.publicCode || '—'
-}
-
 function durationLabel(weeks: number) {
   return `${weeks} 周`
 }
@@ -445,20 +441,7 @@ function resetFiltersInDrawer() {
   resetFilters()
 }
 
-function openTask(task: Task) {
-  void router.push(`/tasks/${task.id}`)
-}
-
-async function openPublisherChat(task: Task, event: Event) {
-  event.stopPropagation()
-  if (!auth.token) {
-    void router.push('/auth/login')
-    return
-  }
-  if (auth.user?.role !== 'STUDENT') {
-    void router.push(`/tasks/${task.id}`)
-    return
-  }
+async function openPublisherChat(task: Task) {
   try {
     await api(`/api/v1/tasks/${task.id}/messages/open`, { method: 'POST' })
     void router.push({ path: '/messages', query: { taskId: String(task.id) } })
@@ -578,38 +561,38 @@ onUnmounted(() => {
       <p class="channel-note">{{ activeModuleMeta.blurb }}</p>
     </div>
 
-    <header v-if="isMobile" id="opportunities" class="page-head page-head-mobile">
-      <p class="mobile-count">{{ resultCount }} 个开放职位</p>
-    </header>
-
-    <nav v-if="isMobile" class="module-tabs compact" aria-label="任务频道">
-      <button
-        v-for="item in modules"
-        :key="item.value"
-        type="button"
-        class="module-tab"
-        :class="{ active: activeModule === item.value }"
-        :aria-pressed="activeModule === item.value"
-        @click="switchModule(item.value)"
+    <section v-if="isMobile" id="opportunities" class="mobile-filter-entry" aria-label="搜索与筛选任务">
+      <a-input
+        v-model="filters.keyword"
+        allow-clear
+        size="large"
+        aria-label="搜索任务"
+        placeholder="搜索任务或发布方"
+        class="mobile-filter-search"
       >
-        <span class="module-name">{{ item.shortLabel }}</span>
-      </button>
-    </nav>
-
-    <!-- Mobile filter entry + bottom drawer -->
-    <section v-if="isMobile" class="mobile-filter-entry">
+        <template #prefix><icon-search aria-hidden="true" /></template>
+      </a-input>
+      <nav class="module-tabs compact" aria-label="任务频道">
+        <button
+          v-for="item in modules"
+          :key="item.value"
+          type="button"
+          class="module-tab"
+          :class="{ active: activeModule === item.value }"
+          :aria-pressed="activeModule === item.value"
+          @click="switchModule(item.value)"
+        >
+          <span class="module-name">{{ item.shortLabel }}</span>
+        </button>
+      </nav>
       <div class="mobile-filter-bar">
-        <button type="button" class="filter-toggle" :class="{ active: selectedFilterCount > 0 }" @click="openFilterDrawer">
+        <p class="mobile-count" aria-live="polite">{{ loadError ? '任务加载失败' : `${resultCount} 个开放任务` }}</p>
+        <button type="button" class="filter-toggle" :class="{ active: selectedFilterCount > 0 }"
+          :aria-expanded="filterDrawerVisible" aria-haspopup="dialog" @click="openFilterDrawer">
+          <icon-filter aria-hidden="true" />
           <span>筛选</span>
           <span v-if="selectedFilterCount" class="filter-count">{{ selectedFilterCount }}</span>
         </button>
-        <a-input
-          v-model="filters.keyword"
-          allow-clear
-          size="small"
-          placeholder="搜索标题 / 发布方"
-          class="mobile-filter-search"
-        />
       </div>
       <div v-if="selectedFilterCount" class="mobile-selected-row">
         <button
@@ -721,33 +704,37 @@ onUnmounted(() => {
       <a-empty v-if="!loading && tasks.length === 0"
         :description="loadError ? '任务加载失败' : '没有匹配的任务，请调整筛选条件'" />
       <div v-else-if="tasks.length && isMobile" class="job-cards">
-        <article
-          v-for="task in tasks"
-          :key="task.id"
-          class="job-card"
-          role="button"
-          tabindex="0"
-          @click="openTask(task)"
-          @keydown.enter="openTask(task)"
-        >
-          <div class="job-card-top">
-            <a-tag size="small" color="arcoblue">{{ TASK_ROLE_LABEL[task.roleType] || task.roleType }}</a-tag>
-            <span class="job-code mono">{{ taskCode(task) }}</span>
-          </div>
-          <h3 class="job-title">{{ task.title }}</h3>
-          <p class="job-meta">
-            <template v-if="isIntern">{{ task.techField }} · {{ durationLabel(task.durationWeeks) }}</template>
-            <template v-else-if="isTa">{{ scheduleLabel(task) }} · {{ task.estimatedHours }}h/周</template>
-            <template v-else-if="isTeam">
-              {{ (task.positions || []).map((item) => item.title).join(' / ') || task.techField }} · 名额 {{ seatLabel(task) }}
-            </template>
-            <template v-else>{{ task.techField }} · {{ scheduleLabel(task) }}</template>
-          </p>
+        <article v-for="task in tasks" :key="task.id" class="job-card">
+          <router-link :to="`/tasks/${task.id}`" class="job-card-link">
+            <div class="job-card-top">
+              <h3 class="job-title">{{ task.title }}</h3>
+              <span class="seat">名额 {{ task.filled }}/{{ task.quota }}</span>
+            </div>
+            <p class="job-meta">
+              <template v-if="isIntern">
+                <span v-if="task.techField">{{ task.techField }}</span>
+                <span>{{ durationLabel(task.durationWeeks) }}</span>
+              </template>
+              <template v-else-if="isTa">
+                <span v-if="task.scheduleType">{{ scheduleLabel(task) }}</span>
+                <span>每周 {{ task.estimatedHours }} 小时</span>
+              </template>
+              <template v-else-if="isTeam">
+                <span v-for="position in (task.positions || []).slice(0, 3)" :key="position.id">{{ position.title }}</span>
+                <span v-if="!task.positions?.length && task.techField">{{ task.techField }}</span>
+              </template>
+              <template v-else>
+                <span v-if="task.techField">{{ task.techField }}</span>
+                <span v-if="task.scheduleType">{{ scheduleLabel(task) }}</span>
+              </template>
+            </p>
+          </router-link>
           <div class="job-foot">
-            <button type="button" class="publisher-chip" @click="openPublisherChat(task, $event)">
-              {{ task.publisherName }}
+            <span class="job-publisher">{{ task.publisherName }}</span>
+            <button v-if="auth.user?.role === 'STUDENT'" type="button" class="publisher-chip"
+              :aria-label="`与${task.publisherName}沟通`" @click="openPublisherChat(task)">
+              沟通
             </button>
-            <span class="seat">名额 {{ seatLabel(task) }}</span>
           </div>
         </article>
       </div>
@@ -869,11 +856,6 @@ onUnmounted(() => {
   color: var(--ink);
 }
 .module-tab.active .module-name { color: #1d4ed8; }
-.page-head-mobile {
-  margin: 8px 0 10px;
-  align-items: center;
-}
-
 .chip-group {
   display: flex;
   flex-wrap: nowrap;
@@ -1011,7 +993,7 @@ onUnmounted(() => {
 .browse-head {
   scroll-margin-top: 80px;
   padding: 18px 22px;
-  background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
+  background: var(--heading-surface);
   border-bottom: 1px solid var(--desktop-line, var(--line));
 }
 .browse-head > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 14px; min-width: 0; }
@@ -1304,71 +1286,74 @@ onUnmounted(() => {
   .browse-results { grid-template-columns: minmax(200px, 34%) minmax(0, 1fr); }
   .browse-head { grid-template-columns: 1fr; }
 }
+.mobile-filter-entry {
+  margin: -12px -12px 10px;
+  padding: 10px 14px 0;
+  background: var(--heading-surface);
+  border-bottom: 1px solid #e8edf5;
+}
+.mobile-filter-search {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgb(var(--primary-3));
+  border-radius: 24px;
+  background: #fff;
+}
+.mobile-filter-search :deep(.arco-input-prefix) { color: rgb(var(--primary-6)); }
 .module-tabs.compact {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
-  margin-bottom: 12px;
+  margin: 8px 0 0;
+  border-bottom: 1px solid #edf1f6;
 }
 .module-tabs.compact .module-tab {
-  padding: 8px 4px;
-  border-radius: 10px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
   text-align: center;
 }
-.module-tabs.compact .module-name { font-size: 13px; white-space: nowrap; }
-.mobile-count { margin: 0; color: #6b7280; font-size: 13px; }
-.mobile-filter-entry {
-  margin-bottom: 12px;
-}
+.module-tabs.compact .module-tab.active { border-bottom-color: rgb(var(--primary-6)); }
+.module-tabs.compact .module-name { font-size: 14px; white-space: nowrap; }
+.mobile-count { color: #64748b; font-size: 13px; }
 .mobile-filter-bar {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
+  display: flex;
   align-items: center;
-  padding: 8px 10px;
-  background: #fff;
-  border: 1px solid #eef2f7;
-  border-radius: 14px;
+  justify-content: space-between;
 }
 .filter-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid #dbeafe;
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-radius: 999px;
-  padding: 7px 12px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: #334155;
+  font: inherit;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 650;
   cursor: pointer;
-  white-space: nowrap;
 }
-.filter-toggle.active {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #fff;
-}
+.filter-toggle.active { color: rgb(var(--primary-6)); }
 .filter-count {
   min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.22);
-  font-size: 11px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background: rgb(var(--primary-1));
   line-height: 18px;
   text-align: center;
 }
-.filter-toggle:not(.active) .filter-count {
-  background: #2563eb;
-  color: #fff;
-}
-.mobile-filter-search { width: 100%; }
 .mobile-selected-row {
   display: flex;
   gap: 8px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 8px 2px 0;
+  padding: 0 2px 10px;
 }
 .mobile-selected-row .selected-chip {
   flex: none;
@@ -1442,50 +1427,41 @@ onUnmounted(() => {
 }
 .job-card {
   background: #fff;
-  border: 1px solid #eef2f7;
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  cursor: pointer;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  overflow: hidden;
 }
-.job-card:active { background: #f8fafc; }
-.job-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.job-code { font-size: 12px; }
-.job-title {
-  margin: 0 0 8px;
-  font-size: 16px;
-  line-height: 1.45;
-  color: #111827;
-}
-.job-meta {
-  margin: 0 0 12px;
-  font-size: 13px;
-  color: #6b7280;
-  line-height: 1.5;
-}
+.job-card-link { display: block; padding: 14px 14px 12px; color: inherit; }
+.job-card-link:active { background: #eff6ff; }
+.job-card-link:focus-visible { outline: 2px solid rgb(var(--primary-6)); outline-offset: -2px; }
+.job-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.job-title { font-size: 16px; line-height: 1.45; overflow-wrap: anywhere; }
+.seat { flex: none; font-size: 12px; font-weight: 650; color: rgb(var(--primary-6)); }
+.job-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.job-meta:not(:empty) { margin-top: 8px; }
+.job-meta span { padding: 2px 7px; border-radius: 4px; background: #f1f5f9; color: #475569; font-size: 12px; }
 .job-foot {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  background: #f8fafc;
 }
+.job-publisher { color: #475569; font-size: 13px; overflow-wrap: anywhere; }
 .publisher-chip {
+  flex: none;
+  min-height: 44px;
+  padding: 0 8px;
   border: 0;
-  background: #eff6ff;
-  color: #2563eb;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
+  background: transparent;
+  color: rgb(var(--primary-6));
+  font: inherit;
+  font-size: 13px;
   font-weight: 650;
   cursor: pointer;
 }
-.seat { font-size: 12px; color: #9ca3af; }
 </style>
 
 <style>

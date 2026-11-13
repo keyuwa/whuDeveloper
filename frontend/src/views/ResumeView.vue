@@ -329,4 +329,9 @@ onMounted(async () => {
   padding: 12px 0 calc(12px + var(--bottom-inset, 0px));
   background: linear-gradient(180deg, transparent, #f9fafb 30%);
 }
+.resume-mobile .form-actions.sticky {
+  bottom: calc(var(--mobile-nav-height, 56px) + var(--bottom-inset, 0px));
+  padding: 8px 0;
+}
+.resume-mobile .form-actions :deep(.arco-btn-primary) { min-height: 44px; }
 </style>

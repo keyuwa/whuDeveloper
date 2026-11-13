@@ -112,11 +112,16 @@ const studentTabs: TabItem[] = [
     match: (path) => path.startsWith('/me/workbench') || path.startsWith('/me/projects'),
   },
   {
+    key: '/messages',
+    label: '消息',
+    icon: 'messages',
+    match: (path) => path.startsWith('/messages'),
+  },
+  {
     key: '/me',
     label: '我的',
     icon: 'me',
-    match: (path) =>
-      path === '/me' || path.startsWith('/me/resume') || path.startsWith('/messages'),
+    match: (path) => path === '/me' || path.startsWith('/me/resume'),
   },
 ]
 
@@ -129,6 +134,7 @@ const publisherTabs = computed<TabItem[]>(() => [
     icon: 'inbox',
     match: (path) => path.startsWith('/publisher/inbox') || path.startsWith('/publisher/projects'),
   },
+  { key: '/messages', label: '消息', icon: 'messages', match: (path) => path.startsWith('/messages') },
 ])
 
 const guestTabs: TabItem[] = [
@@ -176,16 +182,28 @@ const hideMobileTab = computed(() => {
   return false
 })
 
+const mobileShowBack = computed(() => {
+  const path = route.path
+  return path.startsWith('/tasks/') || path.startsWith('/me/projects/') || path.startsWith('/publisher/projects/')
+})
+
 const mobileTitle = computed(() => {
   const path = route.path
   if (path === '/' || path.startsWith('/ability')) return 'WHU Dev'
   if (path === '/plaza') return '任务广场'
+  if (path === '/auth/login') return '登录'
+  if (path === '/auth/register') return '注册'
+  if (path.startsWith('/me/projects/') || path.startsWith('/publisher/projects/')) return '项目工作区'
+  if (path.startsWith('/me/resume')) return '我的简历'
+  if (path === '/publisher/tasks/new') return '发布任务'
+  if (path.startsWith('/publisher/tasks/')) return '编辑任务'
+  if (path.startsWith('/admin/')) return '管理后台'
   if (path.startsWith('/messages')) return '消息'
   if (path.startsWith('/me/workbench')) return '工作台'
   if (path === '/me' || path.startsWith('/me/resume')) return '我的'
   if (path.startsWith('/publisher/tasks')) return '我的任务'
   if (path.startsWith('/publisher/inbox')) return '审阅'
-  if (path.startsWith('/tasks/')) return '职位详情'
+  if (path.startsWith('/tasks/')) return '任务详情'
   return 'WHU Dev'
 })
 
@@ -445,19 +463,29 @@ function formatTime(value: string) {
     <!-- Mobile compact header -->
     <template v-else>
       <header class="mobile-header">
+        <button
+          v-if="mobileShowBack"
+          type="button"
+          class="mobile-back"
+          aria-label="返回"
+          @click="router.back()"
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
         <div class="mobile-header-main">
           <div class="mobile-title">{{ mobileTitle }}</div>
         </div>
         <div class="mobile-header-actions">
           <template v-if="user">
-            <a-badge class="header-notify-badge" :count="unread" :max-count="99">
-              <a-button type="text" shape="circle" size="small" @click="openNotifications">
-                <icon-notification />
-              </a-button>
-            </a-badge>
-            <a-button type="text" size="small" class="mobile-logout" @click="onLogout">退出</a-button>
+            <button type="button" class="mobile-icon-btn" aria-label="通知" @click="openNotifications">
+              <span v-if="unread" class="mobile-dot" />
+              <icon-notification />
+            </button>
+            <button v-if="user.role !== 'STUDENT'" type="button" class="mobile-text-btn" @click="onLogout">退出</button>
           </template>
-          <a-button v-else type="text" size="small" @click="router.push('/auth/login')">登录</a-button>
+          <button v-else type="button" class="mobile-text-btn" @click="router.push('/auth/login')">登录</button>
         </div>
       </header>
       <a
@@ -476,6 +504,10 @@ function formatTime(value: string) {
         <nav v-if="!isMobile && user?.role === 'ADMIN' && route.path.startsWith('/admin/')" class="desktop-list admin-nav" aria-label="管理后台">
           <router-link v-for="item in adminMenus.filter(item => item.key.startsWith('/admin/'))" :key="item.key"
             :to="item.key" class="desktop-list-item">{{ item.label }}</router-link>
+        </nav>
+        <nav v-if="isMobile && user?.role === 'ADMIN' && route.path.startsWith('/admin/')" class="mobile-admin-nav" aria-label="管理模块">
+          <router-link v-for="item in adminMenus.filter(item => item.key.startsWith('/admin/'))" :key="item.key"
+            :to="item.key" :aria-current="route.path.startsWith(item.key) ? 'page' : undefined">{{ item.label }}</router-link>
         </nav>
         <main class="page-content">
           <router-view />
@@ -496,6 +528,7 @@ function formatTime(value: string) {
         type="button"
         class="tab-item"
         :class="{ active: activeTabKey === item.key }"
+        :aria-current="activeTabKey === item.key ? 'page' : undefined"
         @click="goNav(item.key)"
       >
         <span class="tab-icon" aria-hidden="true">
@@ -697,14 +730,54 @@ function formatTime(value: string) {
   z-index: 40;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  height: 48px;
-  padding: 0 14px;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid #eef2f7;
+  gap: 4px;
+  height: 52px;
+  padding: 0 12px 0 16px;
+  background: #fff;
+  border-bottom: 1px solid #f0f2f5;
   box-sizing: border-box;
+}
+.mobile-back,
+.mobile-icon-btn,
+.mobile-text-btn {
+  border: 0;
+  background: transparent;
+  color: #1f2937;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-back,
+.mobile-icon-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  flex: none;
+}
+.mobile-back { margin-inline-start: -10px; }
+.mobile-back:active,
+.mobile-icon-btn:active {
+  background: #f3f4f6;
+}
+.mobile-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 1.5px #fff;
+}
+.mobile-text-btn {
+  min-height: 44px;
+  padding: 0 8px;
+  font-size: 14px;
+  font-weight: 650;
+  color: #2563eb;
 }
 .mobile-header-main {
   min-width: 0;
@@ -712,25 +785,19 @@ function formatTime(value: string) {
 }
 .mobile-title {
   font-size: 17px;
-  font-weight: 750;
+  font-weight: 700;
   color: #111827;
   line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mobile-header-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
-  height: 32px;
-  overflow: visible;
-}
-.mobile-header-actions :deep(.arco-badge) {
-  line-height: 1;
-  overflow: visible;
-}
-.mobile-header-actions :deep(.arco-btn) {
-  width: 32px;
-  height: 32px;
+  height: 40px;
 }
 /* Keep the unread pill inside the bell, not past the header edge. */
 .header-notify-badge {
@@ -750,14 +817,6 @@ function formatTime(value: string) {
   transform: none !important;
   box-shadow: 0 0 0 1px #fff;
   box-sizing: border-box;
-}
-.mobile-logout {
-  color: #6b7280;
-  font-weight: 600;
-  padding: 0 6px !important;
-  font-size: 13px;
-  width: auto !important;
-  height: 32px !important;
 }
 .mobile-tutorial-hint {
   display: block;
@@ -781,7 +840,26 @@ function formatTime(value: string) {
   padding: 12px 12px 24px !important;
 }
 .app-shell.tab-pad .page-mobile {
-  padding-bottom: calc(56px + var(--bottom-inset, 0px)) !important;
+  padding-bottom: calc(var(--mobile-nav-height) + 12px + var(--bottom-inset, 0px)) !important;
+}
+.mobile-admin-nav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+.mobile-admin-nav a {
+  flex: none;
+  padding: 11px 12px;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text-body);
+  font-size: 14px;
+}
+.mobile-admin-nav a[aria-current="page"] {
+  color: rgb(var(--primary-6));
+  background: rgb(var(--primary-1));
+  font-weight: 700;
 }
 .mobile-tabbar {
   position: fixed;
@@ -792,7 +870,7 @@ function formatTime(value: string) {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0;
-  min-height: 50px;
+  min-height: calc(var(--mobile-nav-height) + var(--bottom-inset, 0px));
   padding: 4px 0 calc(4px + var(--bottom-inset, 0px));
   background: rgba(255, 255, 255, 0.98);
   border-top: 1px solid #eef2f7;
@@ -801,7 +879,7 @@ function formatTime(value: string) {
 .tab-item {
   border: 0;
   background: transparent;
-  color: #9ca3af;
+  color: #64748b;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -823,13 +901,13 @@ function formatTime(value: string) {
   display: block;
 }
 .tab-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 650;
   line-height: 1.2;
   letter-spacing: 0.01em;
 }
 .tab-item.active {
-  color: #2563eb;
+  color: rgb(var(--primary-6));
 }
 .tab-item.active .tab-label {
   font-weight: 750;

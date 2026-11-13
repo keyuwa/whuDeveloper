@@ -545,12 +545,12 @@ async function startChat() {
 <style scoped>
 .detail { width: 100%; margin: 0; gap: 26px; padding: 10px 0 40px; box-sizing: border-box; }
 .back-link { color: #737e90; font-size: 13px; width: fit-content; }
-.hero-card { background: #fff; border-radius: 4px; border-top: 4px solid #2563b5; }
+.hero-card { background: var(--heading-surface); border: 1px solid var(--surface-line); }
 .hero-card :deep(.arco-card-body) { padding: 34px 38px; }
 .hero-card :deep(h3) { font-size: 28px; line-height: 1.5; }
 .detail-grid { grid-template-columns: minmax(0, 1fr) 310px; gap: 28px; }
 .main-col { gap: 24px; }
-.main-col :deep(.arco-card) { border: 1px solid #eef2f7; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.main-col :deep(.arco-card) { border: 1px solid var(--surface-line); border-radius: var(--surface-radius); box-shadow: var(--shadow-xs); }
 .main-col :deep(.arco-card-header) { margin: 0 30px; padding: 25px 0 18px; height: auto; border-bottom: 1px solid #f1f5f9; }
 .main-col :deep(.arco-card-header-title) { font-size: 19px; font-weight: 700; color: #111827; border-left: 0; padding-left: 0; }
 .main-col :deep(.arco-card-body) { padding: 24px 30px 32px; }
@@ -558,7 +558,7 @@ async function startChat() {
 .project-document h3 { font-size: 16px; margin: 24px 0 10px; color: #111827; }
 .project-document h3:first-child { margin-top: 0; }
 .project-document p { margin-bottom: 10px; }
-.side-col :deep(.arco-card) { border: 1px solid #eef2f7; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.side-col :deep(.arco-card) { border: 1px solid var(--surface-line); border-radius: var(--surface-radius); box-shadow: var(--shadow-xs); }
 .side-col :deep(.arco-card-header) { background: #f9fafb; }
 .meta-row { grid-template-columns: 70px minmax(0,1fr); line-height: 1.8; overflow-wrap: anywhere; }
 .meta-list { gap: 20px; }
@@ -650,6 +650,15 @@ async function startChat() {
 .detail-mobile :deep(.arco-card) {
   max-width: 100%;
 }
+.detail.detail-mobile { gap: 12px; padding-top: 0; }
+.detail-mobile .hero-card { border-radius: 12px; border-top: 0; }
+.detail-mobile .hero-card :deep(.arco-card-body) { padding: 16px; }
+.detail-mobile .hero-card :deep(h3) { font-size: 22px; line-height: 1.4; overflow-wrap: anywhere; }
+.detail-mobile .detail-grid,
+.detail-mobile .main-col { gap: 12px; }
+.detail-mobile .main-col :deep(.arco-card-header) { margin: 0 16px; padding: 13px 0; }
+.detail-mobile .main-col :deep(.arco-card-header-title) { font-size: 16px; }
+.detail-mobile .main-col :deep(.arco-card-body) { padding: 14px 16px 18px; }
 .doc-file a {
   display: block;
   overflow-wrap: anywhere;
@@ -675,6 +684,7 @@ async function startChat() {
 }
 .mobile-cta-bar :deep(.arco-btn) {
   min-width: 0;
+  min-height: 44px;
 }
 </style>
 

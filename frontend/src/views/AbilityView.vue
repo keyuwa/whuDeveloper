@@ -277,7 +277,7 @@ function goPlaza() {
   padding: 20px 18px;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  background: linear-gradient(180deg, #f8fbff 0%, #fff 70%);
+  background: var(--heading-surface);
 }
 .track h3 {
   margin: 0 0 8px;
@@ -300,7 +300,7 @@ function goPlaza() {
   margin-top: 28px;
   padding: 24px 22px;
   border-radius: 16px;
-  background: linear-gradient(120deg, #eff6ff, #f8fafc 55%, #ecfeff);
+  background: var(--heading-surface);
   border: 1px solid #dbeafe;
 }
 .cta-band h2 {
@@ -328,5 +328,14 @@ function goPlaza() {
   .tracks {
     grid-template-columns: 1fr;
   }
+}
+@media (max-width: 767px) {
+  .hero { padding: 22px 16px; }
+  .hero-art { display: none; }
+  .hero h1 { font-size: 26px; }
+  .hero-actions { gap: 12px; flex-wrap: wrap; }
+  .hero-actions .arco-btn { min-height: 44px; }
+  .panel { padding: 16px; }
+  .cta-band { flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; }
 }
 </style>

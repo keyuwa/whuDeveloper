@@ -255,9 +255,8 @@ watch(
       <div class="chat-shell" :class="{ 'mobile-mode': isMobile }">
         <aside v-if="showThreadPane" class="thread-pane">
           <div class="thread-pane-head">
-            <h1 class="thread-pane-title">消息</h1>
+            <h1 v-if="!isMobile" class="thread-pane-title">消息</h1>
             <a-input
-              v-if="!isMobile"
               v-model="threadSearch"
               allow-clear
               size="small"
@@ -304,7 +303,7 @@ watch(
           <template v-if="activeTaskId">
             <div class="chat-header">
               <div class="chat-header-main">
-                <button v-if="isMobile" type="button" class="back-chat" @click="clearActiveChat">←</button>
+                <button v-if="isMobile" type="button" class="back-chat" aria-label="返回会话列表" @click="clearActiveChat">←</button>
                 <span class="chat-avatar" aria-hidden="true">{{ avatarLetter(peerName || '对') }}</span>
                 <div class="chat-header-text">
                   <strong>{{ peerName || '对话' }}</strong>
@@ -724,9 +723,14 @@ watch(
   border: 1px solid #e5eaf1;
   border-radius: 12px;
 }
+.messages-mobile .thread-search { width: 100%; min-height: 40px; border-radius: 20px; }
+.messages-mobile .back-chat { min-width: 44px; min-height: 44px; }
+.messages-mobile .composer-input :deep(textarea) { min-height: 44px; font-size: 16px; }
+.messages-mobile .chat-composer { padding: 10px 12px; }
+.messages-mobile .composer-bar .arco-btn { min-height: 40px; }
 .messages-mobile .chat-pane {
-  min-height: calc(100vh - 110px);
-  max-height: calc(100vh - 110px);
+  height: max(280px, calc(100dvh - 88px - var(--bottom-inset, 0px)));
+  min-height: 0;
   background: #f7f8fa;
   border: 1px solid #e5eaf1;
   border-radius: 12px;

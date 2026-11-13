@@ -85,7 +85,7 @@ function onLogout() {
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  background: var(--brand-gradient);
   color: #fff;
   display: grid;
   place-items: center;
@@ -120,4 +120,16 @@ function onLogout() {
 .me-row:last-child { border-bottom: 0; }
 .arrow { color: #9ca3af; font-weight: 500; }
 .hint { margin-top: 16px; font-size: 12px; color: #9ca3af; text-align: center; }
+@media (max-width: 767px) {
+  .me-hero {
+    margin-bottom: 12px;
+    padding: 16px;
+    border-radius: var(--mobile-radius, 12px);
+    background: var(--heading-surface);
+  }
+  .me-meta { overflow-wrap: anywhere; }
+  .me-list { border-radius: var(--mobile-radius, 12px); }
+  .me-row { min-height: 52px; }
+  .me-row:active { background: #eff6ff; }
+}
 </style>

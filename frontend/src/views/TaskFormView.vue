@@ -832,6 +832,7 @@ async function save(publish: boolean) {
   }
   .action-buttons :deep(.arco-btn) {
     flex: 1;
+    min-height: 44px;
   }
 }
 </style>

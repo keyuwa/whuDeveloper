@@ -1,6 +1,11 @@
 :root {
   --font: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --bg-page: #f9fafb;
+  --bg-page: #f5f7fb;
+  --bg-subtle: #f8fafc;
+  --surface-line: #e2e8f0;
+  --surface-radius: 12px;
+  --field-radius: 8px;
+  --heading-surface: linear-gradient(180deg, #f0f6ff, var(--bg-surface));
   --bg-surface: #ffffff;
   --text-strong: #111827;
   --text-body: #4b5563;
@@ -10,6 +15,8 @@
   --brand-gradient: linear-gradient(135deg, var(--brand-from), var(--brand-to));
   --radius-lg: 16px;
   --radius-md: 12px;
+  --action-radius: 12px;
+  --action-touch-height: 44px;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
   --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
   /* Common web content column: centered, not edge-to-edge on wide screens */
@@ -44,6 +51,26 @@ html.is-wechat {
 }
 
 * { box-sizing: border-box; }
+
+/* Keep Arco text actions, icon shapes and grouped controls distinct from standard buttons. */
+.arco-btn:not(.arco-btn-text, .arco-btn-only-icon, .arco-btn-shape-circle, .arco-btn-shape-round, .arco-btn-group .arco-btn) {
+  border-radius: var(--action-radius);
+  font-weight: 600;
+}
+
+.arco-btn.arco-btn-secondary.arco-btn-status-normal:not(:disabled, .arco-btn-disabled) {
+  --color-secondary: rgb(var(--primary-1));
+  --color-secondary-hover: rgb(var(--primary-2));
+  --color-secondary-active: rgb(var(--primary-3));
+}
+.arco-btn.arco-btn-secondary.arco-btn-status-normal:not(:disabled, .arco-btn-disabled),
+.arco-btn.arco-btn-secondary.arco-btn-status-normal:not(:disabled, .arco-btn-disabled):is(:hover, :active) {
+  color: rgb(var(--primary-7));
+}
+
+.app-shell.mobile .page-content .arco-btn:not(.arco-btn-text, .arco-btn-only-icon, .arco-btn-size-mini, .arco-btn-shape-circle, .arco-btn-group .arco-btn) {
+  min-height: var(--action-touch-height);
+}
 
 html, body, #app {
   margin: 0;
@@ -87,6 +114,50 @@ html.is-mobile .page {
   padding: 16px 12px 24px;
 }
 
+.app-shell.mobile {
+  --mobile-nav-height: 56px;
+  --mobile-line: var(--surface-line);
+  --mobile-radius: var(--surface-radius);
+  background: var(--bg-page);
+}
+.page-mobile .page-content { min-width: 0; }
+.page-mobile .page-head { flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.page-mobile .page-head > * { min-width: 0; max-width: 100%; }
+.page-mobile .page-head h1 { font-size: 22px; overflow-wrap: anywhere; }
+.page-mobile .page-head .subtitle { max-width: none; }
+/* Shared surfaces and fields across both layouts. */
+.app-shell .page-content .arco-card {
+  min-width: 0;
+  border-radius: var(--surface-radius);
+}
+.app-shell .page-content .arco-card-bordered,
+.app-shell .page-content .arco-card-header { border-color: var(--surface-line); }
+.app-shell .page-content :is(.arco-input-wrapper, .arco-textarea-wrapper, .arco-select-view, .arco-picker) {
+  --border-radius-small: var(--field-radius);
+}
+.app-shell .page-content .arco-tabs-nav-ink { background-color: rgb(var(--primary-6)); }
+.app-shell .page-content .arco-tabs-tab-active { color: rgb(var(--primary-7)); }
+
+.page-mobile .arco-card-header-title { min-width: 0; overflow-wrap: anywhere; }
+.page-mobile .arco-card-header-extra { flex-shrink: 0; }
+.page-mobile :is(.arco-input, .arco-textarea) { font-size: 16px; }
+.page-mobile .arco-form-item-content { min-width: 0; }
+.page-mobile .arco-form-item-label { white-space: normal; }
+.page-mobile .arco-table { max-width: 100%; }
+.page-mobile .arco-table-container { overflow-x: auto; }
+.page-mobile .arco-table-container > table { min-width: 520px; }
+.page-mobile .auth-page {
+  min-height: calc(100dvh - 80px);
+  place-items: start center;
+  padding: 12px 0 24px;
+}
+.page-mobile .auth-card { width: min(440px, 100%); box-shadow: none; }
+.page-mobile .auth-card .arco-btn-primary { min-height: 44px; }
+.page-mobile :is(a, button, summary):focus-visible {
+  outline: 2px solid rgb(var(--primary-6));
+  outline-offset: 2px;
+}
+
 .page-head {
   display: flex;
   justify-content: space-between;
@@ -109,19 +180,19 @@ html.is-mobile .page {
 }
 
 .panel-card {
-  border-radius: var(--radius-lg) !important;
-  border: 1px solid #eef2f7 !important;
+  border-radius: var(--surface-radius) !important;
+  border: 1px solid var(--surface-line) !important;
   box-shadow: var(--shadow-xs);
   background: var(--bg-surface);
 }
 
-.panel-card :deep(.arco-card-header) {
+.panel-card .arco-card-header {
   height: auto;
   padding: 20px 24px 14px;
   border-bottom: 1px solid #f1f5f9;
 }
 
-.panel-card :deep(.arco-card-header-title) {
+.panel-card .arco-card-header-title {
   font-size: 16px;
   font-weight: 700;
   color: var(--text-strong);
@@ -130,7 +201,7 @@ html.is-mobile .page {
   line-height: 1.3;
 }
 
-.panel-card :deep(.arco-card-body) {
+.panel-card .arco-card-body {
   padding: 20px 24px 24px;
 }
 
@@ -273,7 +344,7 @@ html.is-mobile .page {
 
 .auth-card {
   width: min(420px, 100%);
-  border-radius: var(--radius-lg) !important;
+  border-radius: var(--surface-radius) !important;
   box-shadow: var(--shadow-sm);
 }
 
@@ -286,8 +357,8 @@ html.is-mobile .page {
 .task-card {
   height: 100%;
   cursor: pointer;
-  border-radius: var(--radius-lg) !important;
-  border: 1px solid #eef2f7 !important;
+  border-radius: var(--surface-radius) !important;
+  border: 1px solid var(--surface-line) !important;
   box-shadow: var(--shadow-xs);
   transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
@@ -392,18 +463,18 @@ html.is-mobile .layout-header-inner {
 /* Shared desktop navigation, search results and workspace surfaces. */
 .app-shell:not(.mobile) {
   --content-max: 1140px;
-  --desktop-line: #e2e8f0;
+  --desktop-line: var(--surface-line);
   --desktop-accent: rgb(var(--primary-6));
   --desktop-tint: rgb(var(--primary-1));
   --desktop-header-height: 58px;
   --desktop-sticky-top: calc(var(--desktop-header-height) + 14px);
-  --desktop-heading-bg: linear-gradient(180deg, #f8fbff, #ffffff);
+  --desktop-heading-bg: var(--heading-surface);
   --brand-to: #1d4ed8;
   --radius-lg: 12px;
   --radius-md: 8px;
   background:
     radial-gradient(ellipse 70% 28% at 50% -8%, rgba(37, 99, 235, 0.07), transparent 70%),
-    #f5f7fb;
+    var(--bg-page);
 }
 .app-shell:not(.mobile) .page,
 .app-shell:not(.mobile) .layout-header-inner {
@@ -480,7 +551,7 @@ html.plaza-compact .app-shell:not(.mobile) .page {
   border-bottom: 1px solid var(--desktop-line);
 }
 .app-shell:not(.mobile) .page-content .page-head h1 {
-  font-family: "Sora", "Noto Sans SC", sans-serif;
+  font-family: var(--font);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -539,7 +610,7 @@ html.plaza-compact .app-shell:not(.mobile) .page {
 .desktop-preview-body h3 { margin: 0 0 8px; }
 .desktop-preview-body p { white-space: pre-wrap; line-height: 1.7; }
 .desktop-preview-body { max-width: 72ch; }
-.desktop-primary, .desktop-outline { display: inline-flex; align-items: center; min-height: 36px; padding: 0 15px; border: 1px solid var(--desktop-accent); border-radius: var(--radius-md); font: inherit; cursor: pointer; }
+.desktop-primary, .desktop-outline { display: inline-flex; align-items: center; min-height: 36px; padding: 0 15px; border: 1px solid var(--desktop-accent); border-radius: var(--action-radius); font: inherit; font-weight: 600; cursor: pointer; }
 .desktop-primary { background: var(--desktop-accent); color: #fff; }
 .desktop-outline { background: #fff; color: var(--desktop-accent); }
 .desktop-primary:hover { background: rgb(var(--primary-7)); color: #fff; }

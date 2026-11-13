@@ -184,4 +184,10 @@ function leaveProject() {
   padding: 18px 22px;
 }
 @media (max-width: 700px) { .shell-hero { flex-direction: row; align-items: flex-start; }.shell-hero-main { min-width: 0; } }
+@media (max-width: 767px) {
+  .shell-hero { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 0; }
+  .shell-hero :deep(h3) { font-size: 20px; overflow-wrap: anywhere; }
+  .shell-actions { gap: 8px 12px; }
+  .workspace-tabs :deep(.arco-tabs-tab) { min-height: 44px; }
+}
 </style>

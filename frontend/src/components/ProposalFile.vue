@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
-const props = defineProps<{ applicationId: number; fileName: string; preview?: boolean; inline?: boolean }>()
+const props = defineProps<{ applicationId: number; fileName: string; preview?: boolean; inline?: boolean; compact?: boolean }>()
 const loading = ref(false)
 const url = ref('')
 const visible = ref(false)
@@ -50,10 +50,16 @@ async function open(download: boolean) {
 }
 </script>
 <template>
-  <div class="proposal-file">
+  <div class="proposal-file" :class="{ compact }">
     <span class="pdf-mark">PDF</span><span class="file-name">{{ fileName }}</span>
-    <a-button v-if="preview" :loading="loading" @click="open(false)">预览申请书</a-button>
-    <a-button :loading="loading" @click="open(true)">下载申请书</a-button>
+    <div v-if="compact" class="file-actions">
+      <a-button v-if="preview" type="primary" :loading="loading" @click="open(false)">预览申请书</a-button>
+      <a-button :loading="loading" aria-label="下载申请书" @click="open(true)">下载</a-button>
+    </div>
+    <template v-else>
+      <a-button v-if="preview" :loading="loading" @click="open(false)">预览申请书</a-button>
+      <a-button :loading="loading" @click="open(true)">下载申请书</a-button>
+    </template>
     <iframe v-if="inline && visible && url" :src="url" title="申请书 PDF" class="pdf-frame" />
   </div>
   <a-modal v-if="!inline && visible" v-model:visible="visible" fullscreen :title="fileName" :footer="false">
@@ -62,9 +68,14 @@ async function open(download: boolean) {
   </a-modal>
 </template>
 <style scoped>
-.proposal-file { display: flex; align-items: center; gap: 12px; padding: 16px; background: #f5f8fc; border: 1px solid #e2e8f0; border-radius: 6px; flex-wrap: wrap; }
+.proposal-file { display: flex; align-items: center; gap: 12px; padding: 16px; background: var(--bg-subtle); border: 1px solid var(--surface-line); border-radius: var(--field-radius); flex-wrap: wrap; }
 .pdf-mark { color: #b04b3d; font-size: 11px; font-weight: 700; }
 .file-name { flex: 1; min-width: 100px; overflow-wrap: anywhere; font-size: 13px; }
+.proposal-file.compact { padding: 12px; gap: 8px; }
+.compact .file-name { min-width: 0; }
+.file-actions { flex-basis: 100%; display: flex; gap: 8px; }
+.file-actions :deep(.arco-btn) { min-height: 44px; }
+.file-actions :deep(.arco-btn-primary) { flex: 1; }
 .pdf-frame { width: 100%; min-width: 0; height: 32rem; border: 0; }
 .full-preview { height: calc(100dvh - 115px); }
 </style>
