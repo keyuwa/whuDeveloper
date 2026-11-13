@@ -89,6 +89,24 @@ const filtered = computed(() => {
   return list
 })
 
+const keyword = ref('')
+const selectedId = ref<number | null>(null)
+const candidates = computed(() => {
+  const query = keyword.value.trim().toLowerCase()
+  if (!query) return filtered.value
+  return filtered.value.filter((item) =>
+    [item.realName, item.studentName, item.taskTitle, item.positionTitle, item.school]
+      .some((field) => field?.toLowerCase().includes(query)),
+  )
+})
+const selected = computed(() =>
+  candidates.value.find((item) => item.id === selectedId.value) ?? candidates.value[0],
+)
+const displayed = computed(() => {
+  if (isMobile.value) return filtered.value
+  return selected.value ? [selected.value] : []
+})
+
 const filterTitle = computed(() => {
   if (!taskIdFilter.value) return null
   return items.value.find((item) => item.taskId === taskIdFilter.value)?.taskTitle || `任务 #${taskIdFilter.value}`
@@ -137,6 +155,10 @@ watch(taskIdFilter, (id) => {
 })
 
 async function review(id: number, decision: 'ACCEPT' | 'REJECT') {
+  if (decision === 'REJECT' && !notes.value[id]?.trim()) {
+    Message.warning('请填写不通过的具体原因')
+    return
+  }
   loading.value = true
   try {
     const challenge = items.value.some((item) => item.id === id && isChallenge(item))
@@ -211,8 +233,34 @@ function clearTaskFilter() {
       v-if="filtered.length === 0"
       :description="tab === 'pending' ? '暂无待审申请' : '还没有人申请该任务'"
     />
-    <div v-else class="stack">
-      <a-card v-for="item in filtered" :key="item.id">
+    <div v-else class="review-workspace" :class="{ 'review-desktop': !isMobile }">
+      <aside v-if="!isMobile" class="candidate-panel" aria-label="候选人">
+        <div class="candidate-search">
+          <a-input v-model="keyword" aria-label="搜索候选人" placeholder="搜索姓名、学校或项目" allow-clear />
+        </div>
+        <a-empty v-if="!candidates.length" description="没有匹配的申请" />
+        <div v-else class="candidate-list">
+          <button
+            v-for="candidate in candidates"
+            :key="candidate.id"
+            type="button"
+            class="candidate-item"
+            :aria-pressed="selected?.id === candidate.id"
+            @click="selectedId = candidate.id"
+          >
+            <span class="candidate-line">
+              <strong>{{ candidate.realName || candidate.studentName }}</strong>
+              <a-tag size="small" :color="statusColor[candidate.status] || 'gray'">
+                {{ statusLabel[candidate.status] || candidate.status }}
+              </a-tag>
+            </span>
+            <span class="candidate-task">{{ candidate.taskTitle }}<template v-if="candidate.positionTitle"> · {{ candidate.positionTitle }}</template></span>
+            <time :datetime="candidate.createdAt">{{ candidate.createdAt.slice(0, 10) }}</time>
+          </button>
+        </div>
+      </aside>
+      <div class="stack review-detail">
+      <a-card v-for="item in displayed" :key="item.id">
         <div style="display: flex; justify-content: space-between; gap: 12px; align-items: center">
           <a-typography-title :heading="6" style="margin: 0">
             {{ item.realName || item.studentName }}
@@ -264,59 +312,84 @@ function clearTaskFilter() {
             {{ item.resumeFileName || '查看简历 PDF' }}
           </a>
         </div>
-        <div class="resume-title" style="margin-top: 12px">{{ isChallenge(item) ? '方案内容' : '申请内容' }}</div>
-        <article v-if="item.proposalMd" class="md-body proposal-view" v-html="renderMarkdown(item.proposalMd)" />
-        <ProposalFile v-if="item.proposalFileName" :application-id="item.id" :file-name="item.proposalFileName" />
-        <template v-if="item.status === 'SUBMITTED'">
-          <a-input v-model="notes[item.id]" placeholder="评语（可选）" style="margin: 12px 0" />
-          <div class="action-row">
-            <a-space wrap>
-              <a-button status="danger" :loading="loading" @click="review(item.id, 'REJECT')">
-                {{ isChallenge(item) ? '不采纳' : '拒绝' }}
-              </a-button>
-              <a-button
-                type="text"
-                @click="router.push({ path: '/messages', query: { taskId: String(item.taskId), studentId: String(item.studentId) } })"
-              >
-                打开对话
-              </a-button>
-            </a-space>
-            <a-button
-              v-if="isChallenge(item)"
-              type="primary"
-              :loading="loading"
-              @click="award(item.id)"
-            >
-              通过
-            </a-button>
-            <a-button
-              v-else
-              type="primary"
-              :loading="loading"
-              @click="review(item.id, 'ACCEPT')"
-            >
-              通过
-            </a-button>
+        <div class="review-layout">
+          <div class="review-material">
+            <div class="resume-title" style="margin-top: 12px">{{ isChallenge(item) ? '方案内容' : '申请内容' }}</div>
+            <article v-if="item.proposalMd" class="md-body proposal-view" v-html="renderMarkdown(item.proposalMd)" />
+            <ProposalFile v-if="item.proposalFileName" :application-id="item.id" :file-name="item.proposalFileName" preview :inline="!isMobile" />
           </div>
-        </template>
-        <div v-else-if="item.status === 'ACCEPTED'" class="accepted-box">
-          <span>已接收该学生入项</span>
-          <a-button
-            v-if="item.projectId"
-            type="primary"
-            size="small"
-            @click="router.push(`/publisher/projects/${item.projectId}/detail`)"
-          >
-            打开项目
-          </a-button>
+          <div class="review-controls">
+            <a-button
+              @click="router.push({ path: '/messages', query: { taskId: String(item.taskId), studentId: String(item.studentId) } })"
+            >
+              与学生沟通
+            </a-button>
+            <template v-if="item.status === 'SUBMITTED'">
+              <a-input v-model="notes[item.id]" placeholder="审阅意见（拒绝时必填）" style="margin: 12px 0" />
+              <div class="action-row">
+                <a-space wrap>
+                  <a-button status="danger" :loading="loading" @click="review(item.id, 'REJECT')">
+                    {{ isChallenge(item) ? '不采纳' : '拒绝' }}
+                  </a-button>
+                </a-space>
+                <a-button
+                  v-if="isChallenge(item)"
+                  type="primary"
+                  :loading="loading"
+                  @click="award(item.id)"
+                >
+                  通过
+                </a-button>
+                <a-button
+                  v-else
+                  type="primary"
+                  :loading="loading"
+                  @click="review(item.id, 'ACCEPT')"
+                >
+                  通过
+                </a-button>
+              </div>
+            </template>
+            <div v-else-if="item.status === 'ACCEPTED'" class="accepted-box">
+              <span>已接收该学生入项</span>
+              <a-button
+                v-if="item.projectId"
+                type="primary"
+                size="small"
+                @click="router.push(`/publisher/projects/${item.projectId}/detail`)"
+              >
+                打开项目
+              </a-button>
+            </div>
+            <p v-if="item.reviewNote" class="review-note">审阅意见：{{ item.reviewNote }}</p>
+          </div>
         </div>
-        <p v-if="item.reviewNote" class="review-note">审阅意见：{{ item.reviewNote }}</p>
       </a-card>
+      </div>
     </div>
   </section>
 </template>
 
 <style scoped>
+.review-desktop { display: grid; grid-template-columns: minmax(220px, 28%) minmax(0, 1fr); align-items: start; gap: 16px; }
+.review-detail { min-width: 0; }
+.candidate-panel { position: sticky; top: var(--desktop-sticky-top); min-width: 0; border: 1px solid var(--desktop-line); border-radius: var(--radius-lg); background: var(--bg-surface); overflow: hidden; }
+.candidate-search { padding: 12px; border-bottom: 1px solid #e8edf2; }
+.candidate-list { max-height: min(70vh, 780px); overflow-y: auto; }
+.candidate-item { display: grid; gap: 6px; width: 100%; padding: 14px 12px; border: 0; border-left: 3px solid transparent; border-bottom: 1px solid #edf0f4; background: #fff; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.candidate-item:hover { background: #f6f8fb; }
+.candidate-item[aria-pressed="true"] { border-left-color: rgb(var(--primary-6)); background: rgb(var(--primary-1)); }
+.candidate-item:focus-visible { outline: 2px solid rgb(var(--primary-6)); outline-offset: -2px; }
+.candidate-line { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.candidate-line strong, .candidate-task { overflow-wrap: anywhere; }
+.candidate-task { color: #475569; font-size: 13px; }
+.candidate-item time { color: #667585; font-size: 12px; }
+
+@media (min-width: 1000px) {
+  .review-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .review-controls { position: sticky; top: var(--desktop-sticky-top); }
+}
+
 .resume-box {
   margin: 10px 0 6px;
   padding: 12px 14px;

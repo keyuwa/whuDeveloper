@@ -21,9 +21,19 @@ const scheduleLabels = scheduleLabelMap()
 import ProposalFile from '../components/ProposalFile.vue'
 import { routeId } from '../format'
 
+const props = defineProps<{ taskId?: number; embedded?: boolean }>()
 const route = useRoute()
 const router = useRouter()
 const isMobile = useIsMobile()
+const backLink = computed(() => {
+  if (route.query.from === 'workbench') {
+    const tab = route.query.tab
+    if (tab === 'candidates') return { to: '/me/workbench/candidates', label: '返回工作台' }
+    if (tab === 'applications') return { to: '/me/workbench/applications', label: '返回工作台' }
+    return { to: '/me/workbench', label: '返回工作台' }
+  }
+  return { to: '/plaza', label: '返回任务广场' }
+})
 const task = ref<Task | null>(null)
 const proposalText = ref('')
 const proposalFile = ref<File | null>(null)
@@ -72,7 +82,9 @@ function clearProposalFile() {
   proposalFile.value = null
 }
 const loading = ref(false)
-const id = computed(() => routeId(route.params.id))
+const id = computed(() => props.taskId ?? routeId(route.params.id))
+const detailError = ref('')
+const applyPanel = ref<HTMLElement | null>(null)
 const isStudent = computed(() => auth.user?.role === 'STUDENT')
 const resumeReady = computed(() => Boolean(auth.user?.resumeReady))
 
@@ -91,12 +103,15 @@ const programmingTags = computed(() =>
 )
 
 async function load() {
-  if (!id.value) return
+  const taskId = id.value
+  if (!taskId) return
   await loadDicts()
   proposalFile.value = null
   myApplication.value = null
   selectedPositionId.value = undefined
-  task.value = await api<Task>(`/api/v1/tasks/${id.value}`)
+  const detail = await api<Task>(`/api/v1/tasks/${taskId}`)
+  if (id.value !== taskId) return
+  task.value = detail
   if (task.value.roleType === 'TEAM') {
     const firstOpen = (task.value.positions || []).find((item) => item.filled < item.quota)
     selectedPositionId.value = firstOpen?.id ?? task.value.positions?.[0]?.id
@@ -105,22 +120,33 @@ async function load() {
     const me = await api<User>('/api/v1/me/resume')
     if (auth.token && auth.user) setSession(auth.token, { ...auth.user, ...me })
   }
-  if (isStudent.value && task.value.myApplicationId) {
+  if (isStudent.value && detail.myApplicationId && id.value === taskId) {
     const applications = await api<Application[]>('/api/v1/me/applications')
-    myApplication.value = applications.find(item => item.id === task.value?.myApplicationId) || null
+    if (id.value === taskId) {
+      myApplication.value = applications.find(item => item.id === detail.myApplicationId) || null
+    }
   }
 }
 
-watch(
-  () => route.fullPath,
-  () => load().catch((cause) => Message.error(cause instanceof Error ? cause.message : '加载失败')),
-  { immediate: true },
-)
+async function loadDetail() {
+  const taskId = id.value
+  detailError.value = ''
+  task.value = null
+  proposalText.value = ''
+  try {
+    await load()
+  } catch (cause) {
+    if (id.value === taskId) {
+      task.value = null
+      detailError.value = cause instanceof Error ? cause.message : '任务详情加载失败'
+    }
+  }
+}
+
+watch(id, loadDetail, { immediate: true })
 
 function scrollToApply() {
-  const el = document.getElementById('apply')
-  if (!el) return
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  applyPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 async function apply() {
@@ -164,7 +190,8 @@ async function apply() {
 }
 
 function onMobileApplyClick() {
-  if (task.value?.myApplicationId) return
+  if (task.value?.projectId) return router.push(`/me/projects/${task.value.projectId}/progress`)
+  if (task.value?.myApplicationId) return scrollToApply()
   if (!proposalText.value.trim() && !proposalFile.value) {
     scrollToApply()
     Message.info(isChallenge.value ? '请先填写或上传科研方案' : '请先填写或上传申请内容')
@@ -209,8 +236,8 @@ async function startChat() {
 </script>
 
 <template>
-  <section v-if="task" class="detail" :class="{ 'detail-mobile': isMobile, 'has-mobile-cta': isMobile && isStudent }">
-    <router-link to="/" class="back-link">← 返回项目广场</router-link>
+  <section v-if="task" class="detail" :class="{ 'detail-mobile': isMobile, 'detail-embedded': embedded, 'has-mobile-cta': isMobile && isStudent }">
+    <router-link v-if="!embedded" :to="backLink.to" class="back-link">← {{ backLink.label }}</router-link>
     <a-card class="hero-card" :bordered="false">
       <a-typography-title :heading="3" style="margin: 0 0 12px">{{ task.title }}</a-typography-title>
       <a-space wrap>
@@ -236,9 +263,9 @@ async function startChat() {
         >
           {{ task.shortlisted ? '取消备选' : '加入备选' }}
         </a-button>
-        <a href="#apply" class="apply-jump">
+        <button type="button" class="apply-jump linkish" @click="scrollToApply">
           {{ task.myApplicationId ? (isChallenge ? '查看我的方案 ↓' : '查看我的申请 ↓') : (isChallenge ? '提交科研方案 ↓' : '准备申请书 ↓') }}
-        </a>
+        </button>
       </div>
     </a-card>
 
@@ -281,7 +308,8 @@ async function startChat() {
           </div>
           <pre v-if="task.techDocMd" class="md">{{ task.techDocMd }}</pre>
         </a-card>
-        <a-card v-if="isStudent" id="apply" class="application-panel" :title="isChallenge ? '科研方案' : '项目申请'">
+        <div v-if="isStudent" ref="applyPanel" id="apply">
+        <a-card class="application-panel" :title="isChallenge ? '科研方案' : '项目申请'">
           <template v-if="!task.myApplicationId">
             <a-alert
               v-if="!resumeReady"
@@ -348,7 +376,7 @@ async function startChat() {
               {{ task.myApplicationStatus === 'SUBMITTED'
                 ? (isChallenge ? '方案已提交，请等待发布方比选揭榜。' : '申请已提交，请等待发布方审阅。')
                 : task.myApplicationStatus === 'ACCEPTED'
-                  ? (isChallenge ? '已中选入项，可在工作台推进协作。' : '申请已通过，可在工作台查看申请并提交周报。')
+                  ? (isChallenge ? '已中选入项，可在工作台推进协作。' : '申请已通过，可在工作台提交项目进展。')
                   : (isChallenge ? '本次未中选，可查看反馈并探索其他科研任务。' : '本次申请未通过，可查看反馈并探索其他项目。') }}
             </p>
             <article v-if="myApplication?.proposalMd" class="md-body proposal-view" v-html="myProposalHtml" />
@@ -356,9 +384,10 @@ async function startChat() {
             <p v-if="myApplication?.reviewNote" class="application-intro">审阅意见：{{ myApplication.reviewNote }}</p>
           </template>
         </a-card>
+        </div>
       </div>
 
-      <aside class="side-col stack">
+      <aside class="side-col stack" aria-label="项目信息与操作">
         <a-card title="项目信息">
           <div class="meta-list">
             <div class="meta-row">
@@ -459,13 +488,20 @@ async function startChat() {
       <a-button
         type="primary"
         :loading="loading"
-        :disabled="Boolean(task.myApplicationId) || !challengeOpen"
+        :disabled="!task.myApplicationId && !task.projectId && !challengeOpen"
         @click="onMobileApplyClick"
       >
-        {{ task.myApplicationId ? (isChallenge ? '已交方案' : '已申请') : (isChallenge ? '提交方案' : '立即申请') }}
+        {{ task.projectId ? '进入工作台' : task.myApplicationId ? '查看申请状态' : (isChallenge ? '提交方案' : '立即申请') }}
       </a-button>
     </div>
   </section>
+  <div v-else class="detail-state" role="status">
+    <template v-if="detailError">
+      <p>{{ detailError }}</p>
+      <a-button @click="loadDetail">重新加载</a-button>
+    </template>
+    <a-spin v-else-if="id" tip="正在加载任务详情…" />
+  </div>
 </template>
 
 <style scoped>
@@ -640,4 +676,34 @@ async function startChat() {
 .mobile-cta-bar :deep(.arco-btn) {
   min-width: 0;
 }
+</style>
+
+<style scoped>
+@media (min-width: 1100px) {
+  .detail:not(.detail-mobile):not(.detail-embedded) { max-width: 1280px; }
+  .detail:not(.detail-mobile):not(.detail-embedded) .side-col {
+    position: sticky;
+    top: 80px;
+    max-height: calc(100vh - 96px);
+    overflow: auto;
+  }
+  .detail:not(.detail-mobile) .hero-card { border-bottom-color: var(--desktop-line); }
+}
+</style>
+
+<style scoped>
+.detail-state { padding: 32px; text-align: center; }
+.detail-state p { margin-bottom: 12px; }
+.detail.detail-embedded { gap: 0; }
+.detail-embedded .detail-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 12px; }
+.detail-embedded .side-col {
+  position: static;
+  top: auto;
+  max-height: none;
+  overflow: visible;
+  grid-row: 1;
+}
+.detail-embedded .hero-card { border-radius: 12px 12px 0 0; }
+.detail-embedded .hero-card :deep(.arco-card-body) { padding: 20px; }
+.detail-embedded :deep(.arco-card) { overflow-wrap: anywhere; }
 </style>

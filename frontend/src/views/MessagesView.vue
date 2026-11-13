@@ -23,6 +23,17 @@ const isPublisher = computed(() => auth.user?.role === 'PUBLISHER')
 const showChatPane = computed(() => !isMobile.value || Boolean(activeTaskId.value))
 const showThreadPane = computed(() => !isMobile.value || !activeTaskId.value)
 
+const threadSearch = ref('')
+const shownThreads = computed(() => {
+  const query = threadSearch.value.trim().toLowerCase()
+  if (isMobile.value || !query) return threads.value
+  return threads.value.filter((item) =>
+    [isStudent.value ? item.publisherName : item.studentName, item.taskTitle].some((value) =>
+      value?.toLowerCase().includes(query),
+    ),
+  )
+})
+
 const activeThread = computed(() =>
   threads.value.find(
     (item) =>
@@ -42,6 +53,40 @@ function threadKey(item: ThreadSummary) {
 
 function isActive(item: ThreadSummary) {
   return item.taskId === activeTaskId.value && (!isPublisher.value || item.studentId === activeStudentId.value)
+}
+
+function peerOf(item: ThreadSummary) {
+  return isStudent.value ? item.publisherName : item.studentName
+}
+
+function avatarLetter(name: string) {
+  const text = (name || '?').trim()
+  return text ? text.slice(0, 1) : '?'
+}
+
+function formatThreadTime(raw?: string) {
+  if (!raw) return ''
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return raw.replace('T', ' ').slice(0, 16)
+  const now = new Date()
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  if (sameDay) {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  }
+  const sameYear = date.getFullYear() === now.getFullYear()
+  if (sameYear) {
+    return `${date.getMonth() + 1}/${date.getDate()}`
+  }
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
+}
+
+function formatBubbleTime(raw: string) {
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return raw.replace('T', ' ').slice(0, 16)
+  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
 async function loadInbox() {
@@ -72,7 +117,7 @@ function deleteThread(item: ThreadSummary, event: Event) {
   event.stopPropagation()
   Modal.confirm({
     title: '删除会话',
-    content: `确定删除与「${isStudent.value ? item.publisherName : item.studentName}」关于「${item.taskTitle}」的会话吗？消息将不可恢复。`,
+    content: `确定删除与「${peerOf(item)}」关于「${item.taskTitle}」的会话吗？消息将不可恢复。`,
     okText: '删除',
     okButtonProps: { status: 'danger' },
     cancelText: '取消',
@@ -113,7 +158,6 @@ async function openFromQuery() {
     activeTaskId.value = null
     activeStudentId.value = null
     messages.value = []
-    // Desktop: auto-open first thread. Mobile: stay on list.
     if (!isMobile.value && threads.value.length) {
       await selectThread(threads.value[0])
     }
@@ -207,36 +251,52 @@ watch(
 
 <template>
   <section class="messages-page" :class="{ 'messages-mobile': isMobile }">
-    <div v-if="!isMobile" class="page-head messages-head">
-      <div>
-        <h1>私信</h1>
-        <p class="subtitle">围绕任务与对方沟通，会话按任务分开</p>
-      </div>
-    </div>
     <a-spin :loading="loading" class="chat-shell-spin">
       <div class="chat-shell" :class="{ 'mobile-mode': isMobile }">
         <aside v-if="showThreadPane" class="thread-pane">
-          <div class="pane-title">会话</div>
-          <a-empty v-if="!loading && threads.length === 0" description="还没有对话，去任务详情点发布方开聊" />
-          <div
-            v-for="item in threads"
-            :key="threadKey(item)"
-            class="thread-item"
-            :class="{ active: isActive(item) }"
-            role="button"
-            tabindex="0"
-            @click="selectThread(item)"
-            @keydown.enter="selectThread(item)"
-          >
-            <div class="thread-top">
-              <strong>{{ isStudent ? item.publisherName : item.studentName }}</strong>
-              <div class="thread-actions">
-                <span class="thread-time">{{ item.createdAt?.replace('T', ' ').slice(0, 16) }}</span>
-                <button type="button" class="thread-delete" title="删除会话" @click="deleteThread(item, $event)">删除</button>
-              </div>
-            </div>
-            <div class="thread-task">{{ item.taskTitle }}</div>
-            <div class="thread-preview">{{ item.lastBody }}</div>
+          <div class="thread-pane-head">
+            <h1 class="thread-pane-title">消息</h1>
+            <a-input
+              v-if="!isMobile"
+              v-model="threadSearch"
+              allow-clear
+              size="small"
+              class="thread-search"
+              aria-label="搜索会话"
+              placeholder="搜索联系人或任务"
+            />
+          </div>
+          <div class="thread-list">
+            <a-empty v-if="threads.length && !shownThreads.length" description="没有匹配的会话" />
+            <a-empty v-if="!loading && threads.length === 0" description="还没有对话，去任务详情开始沟通" />
+            <button
+              v-for="item in shownThreads"
+              :key="threadKey(item)"
+              type="button"
+              class="thread-item"
+              :class="{ active: isActive(item) }"
+              @click="selectThread(item)"
+            >
+              <span class="thread-avatar" aria-hidden="true">{{ avatarLetter(peerOf(item)) }}</span>
+              <span class="thread-body">
+                <span class="thread-top">
+                  <strong>{{ peerOf(item) }}</strong>
+                  <span class="thread-time">{{ formatThreadTime(item.createdAt) }}</span>
+                </span>
+                <span class="thread-task">{{ item.taskTitle }}</span>
+                <span class="thread-preview">{{ item.lastBody }}</span>
+              </span>
+              <span
+                class="thread-delete"
+                role="button"
+                tabindex="0"
+                title="删除会话"
+                @click="deleteThread(item, $event)"
+                @keydown.enter="deleteThread(item, $event)"
+              >
+                删除
+              </span>
+            </button>
           </div>
         </aside>
 
@@ -244,15 +304,20 @@ watch(
           <template v-if="activeTaskId">
             <div class="chat-header">
               <div class="chat-header-main">
-                <button v-if="isMobile" type="button" class="back-chat" @click="clearActiveChat">← 返回</button>
+                <button v-if="isMobile" type="button" class="back-chat" @click="clearActiveChat">←</button>
+                <span class="chat-avatar" aria-hidden="true">{{ avatarLetter(peerName || '对') }}</span>
                 <div class="chat-header-text">
                   <strong>{{ peerName || '对话' }}</strong>
                   <div class="chat-task">
-                    <router-link :to="`/tasks/${activeTaskId}`">{{ activeThread?.taskTitle || `任务 #${activeTaskId}` }}</router-link>
+                    <router-link :to="`/tasks/${activeTaskId}`">
+                      {{ activeThread?.taskTitle || `任务 #${activeTaskId}` }}
+                    </router-link>
                   </div>
                 </div>
               </div>
-              <a-button size="small" @click="router.push(`/tasks/${activeTaskId}`)">查看任务</a-button>
+              <a-button v-if="!isMobile" type="outline" size="small" @click="router.push(`/tasks/${activeTaskId}`)">
+                查看任务
+              </a-button>
             </div>
             <div class="chat-scroll">
               <div
@@ -261,9 +326,16 @@ watch(
                 class="bubble-row"
                 :class="{ mine: item.senderId === auth.user?.id }"
               >
-                <div class="bubble">
-                  <div class="bubble-meta">{{ item.senderName }} · {{ item.createdAt.replace('T', ' ').slice(0, 16) }}</div>
-                  <div class="bubble-body">{{ item.body }}</div>
+                <span
+                  v-if="item.senderId !== auth.user?.id"
+                  class="bubble-avatar"
+                  aria-hidden="true"
+                >
+                  {{ avatarLetter(item.senderName) }}
+                </span>
+                <div class="bubble-stack">
+                  <div class="bubble">{{ item.body }}</div>
+                  <div class="bubble-time">{{ formatBubbleTime(item.createdAt) }}</div>
                 </div>
               </div>
               <a-empty v-if="messages.length === 0" description="还没有消息，打个招呼吧" />
@@ -271,15 +343,24 @@ watch(
             <div class="chat-composer">
               <a-textarea
                 v-model="draft"
-                :auto-size="{ minRows: 2, maxRows: 4 }"
+                :auto-size="{ minRows: 3, maxRows: 6 }"
+                class="composer-input"
                 placeholder="输入消息，Ctrl + Enter 发送"
                 @keydown.ctrl.enter="send"
               />
-              <a-button type="primary" :loading="sending" :disabled="!draft.trim()" @click="send">发送</a-button>
+              <div class="composer-bar">
+                <span class="composer-hint">围绕当前任务沟通</span>
+                <a-button type="primary" :loading="sending" :disabled="!draft.trim()" @click="send">
+                  发送
+                </a-button>
+              </div>
             </div>
           </template>
           <div v-else class="chat-empty">
-            <a-empty description="选择左侧会话，或在任务页点击发布方开始沟通" />
+            <div class="chat-empty-card">
+              <strong>选择左侧会话开始沟通</strong>
+              <p>也可以在任务详情页点击发布方开启对话</p>
+            </div>
           </div>
         </div>
       </div>
@@ -291,54 +372,117 @@ watch(
 .messages-page {
   width: 100%;
 }
-.messages-head {
-  margin-bottom: 16px;
-}
 .chat-shell-spin {
   width: 100%;
   display: block;
 }
 .chat-shell {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   height: min(680px, calc(100vh - 200px));
   min-height: 480px;
   gap: 0;
   background: #fff;
-  border: 1px solid #eef2f7;
-  border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  border: 1px solid #e5eaf1;
+  border-radius: 12px;
   overflow: hidden;
 }
-.thread-pane {
-  border-right: 1px solid #eef2f7;
-  background: #fafbfc;
-  overflow-y: auto;
-  padding: 12px 10px;
+.chat-shell:not(.mobile-mode) {
+  grid-template-columns: 320px minmax(0, 1fr);
+  height: calc(100dvh - var(--desktop-header-height, 58px) - 36px);
+  min-height: 560px;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
-.pane-title {
-  padding: 4px 10px 12px;
-  font-size: 13px;
-  font-weight: 650;
-  color: #6b7280;
+
+.thread-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid #e5eaf1;
+  background: #fff;
+}
+.thread-pane-head {
+  flex: none;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid #eef2f7;
+}
+.thread-pane-title {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #111827;
+}
+.thread-search {
+  width: 100%;
+}
+.thread-search :deep(.arco-input-wrapper) {
+  background: #f3f5f8;
+  border-color: transparent;
+  border-radius: 8px;
+}
+.thread-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 0;
 }
 .thread-item {
-  display: block;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   width: 100%;
-  text-align: left;
+  margin: 0;
+  padding: 12px 14px;
   border: 0;
-  border-radius: 10px;
+  border-left: 3px solid transparent;
+  border-radius: 0;
   background: transparent;
-  padding: 10px 12px;
+  text-align: left;
   cursor: pointer;
-  margin-bottom: 2px;
-  transition: background 0.15s ease;
+  font: inherit;
+  color: inherit;
 }
 .thread-item:hover {
-  background: #f3f4f6;
+  background: #f5f7fa;
 }
 .thread-item.active {
-  background: #eff6ff;
+  background: #eef5ff;
+  border-left-color: #2563eb;
+}
+.thread-avatar,
+.chat-avatar,
+.bubble-avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #60a5fa, #2563eb);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+.chat-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+}
+.bubble-avatar {
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+  background: linear-gradient(145deg, #94a3b8, #64748b);
+}
+.thread-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 .thread-top {
   display: flex;
@@ -347,28 +491,41 @@ watch(
   align-items: baseline;
 }
 .thread-top strong {
-  font-size: 14px;
-  font-weight: 700;
-  color: #111827;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.thread-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
+  font-size: 14px;
+  font-weight: 650;
+  color: #111827;
 }
 .thread-time {
+  flex: none;
   font-size: 11px;
-  color: #9ca3af;
+  color: #94a3b8;
+}
+.thread-task {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
+  color: #2563eb;
+  font-weight: 500;
+}
+.thread-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #64748b;
 }
 .thread-delete {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
   border: 0;
   background: transparent;
-  color: #9ca3af;
+  color: #94a3b8;
   font-size: 11px;
   padding: 0;
   cursor: pointer;
@@ -381,83 +538,90 @@ watch(
 .thread-delete:hover {
   color: #dc2626;
 }
-.thread-task {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #2563eb;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.thread-preview {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #6b7280;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+
 .chat-pane {
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: #fff;
+  background: #f7f8fa;
 }
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 14px 18px;
-  border-bottom: 1px solid #eef2f7;
+  padding: 12px 18px;
+  border-bottom: 1px solid #e5eaf1;
+  background: #fff;
   flex: none;
+}
+.chat-header-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 .chat-header-text {
   min-width: 0;
 }
 .chat-header strong {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 15px;
   font-weight: 700;
   color: #111827;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .chat-task {
   margin-top: 2px;
-  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
 }
 .chat-task a {
+  color: #64748b;
+}
+.chat-task a:hover {
   color: #2563eb;
-  font-weight: 500;
 }
 .chat-scroll {
   flex: 1;
-  overflow-y: auto;
-  padding: 16px 18px;
-  background: #f8fafc;
   min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px 12px;
 }
 .bubble-row {
   display: flex;
-  margin-bottom: 10px;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 .bubble-row.mine {
   justify-content: flex-end;
 }
+.bubble-stack {
+  max-width: min(460px, 72%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bubble-row.mine .bubble-stack {
+  align-items: flex-end;
+}
 .bubble {
-  max-width: min(420px, 78%);
-  padding: 9px 12px;
-  border-radius: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
   background: #fff;
-  border: 1px solid #eef2f7;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  border: 1px solid #e8edf3;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.03);
 }
 .bubble-row.mine .bubble {
   background: #2563eb;
@@ -465,74 +629,108 @@ watch(
   color: #fff;
   box-shadow: none;
 }
-.bubble-meta {
+.bubble-time {
   font-size: 11px;
-  opacity: 0.72;
-  margin-bottom: 3px;
-}
-.bubble-body {
-  font-size: 14px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  color: #94a3b8;
+  padding-inline: 2px;
 }
 .chat-composer {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: end;
-  padding: 12px 18px 14px;
-  border-top: 1px solid #eef2f7;
-  background: #fff;
   flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid #e5eaf1;
+  background: #fff;
+}
+.composer-input :deep(.arco-textarea-wrapper),
+.composer-input:deep(textarea) {
+  background: #fff;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0;
+}
+.composer-input :deep(textarea) {
+  min-height: 72px;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.composer-hint {
+  font-size: 12px;
+  color: #94a3b8;
 }
 .chat-empty {
   flex: 1;
   display: grid;
   place-items: center;
-  background: #f8fafc;
+  background:
+    radial-gradient(ellipse 50% 40% at 50% 40%, rgba(37, 99, 235, 0.06), transparent 70%),
+    #f7f8fa;
 }
-.chat-header-main {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
+.chat-empty-card {
+  text-align: center;
+  color: #64748b;
+}
+.chat-empty-card strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 15px;
+  color: #334155;
+}
+.chat-empty-card p {
+  margin: 0;
+  font-size: 13px;
 }
 .back-chat {
   border: 0;
   background: transparent;
   color: #2563eb;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 650;
-  padding: 2px 0;
+  padding: 0 2px;
   cursor: pointer;
   flex: none;
 }
+
 .chat-shell.mobile-mode {
   grid-template-columns: 1fr;
   height: auto;
   min-height: calc(100vh - 120px);
   border: 0;
   border-radius: 0;
-  box-shadow: none;
   background: transparent;
 }
 .messages-mobile .thread-pane {
-  max-height: none;
   border-right: 0;
-  padding: 0;
   background: transparent;
+}
+.messages-mobile .thread-pane-head {
+  padding: 0 0 10px;
+  border-bottom: 0;
+}
+.messages-mobile .thread-pane-title {
+  font-size: 16px;
+  margin-bottom: 0;
+}
+.messages-mobile .thread-list {
+  background: #fff;
+  border: 1px solid #e5eaf1;
+  border-radius: 12px;
 }
 .messages-mobile .chat-pane {
   min-height: calc(100vh - 110px);
   max-height: calc(100vh - 110px);
-  background: #fff;
-  border: 1px solid #eef2f7;
+  background: #f7f8fa;
+  border: 1px solid #e5eaf1;
   border-radius: 12px;
   overflow: hidden;
-}
-.messages-mobile .chat-scroll {
-  background: #f8fafc;
 }
 .messages-mobile .thread-delete {
   opacity: 1;

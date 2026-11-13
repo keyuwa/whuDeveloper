@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { Message, type RequestOption } from '@arco-design/web-vue'
+import { IconUpload } from '@arco-design/web-vue/es/icon'
 import { api, uploadPdf } from '../api'
 import { auth, setSession } from '../auth'
 import { useIsMobile } from '../composables/useDevice'
@@ -162,67 +163,57 @@ onMounted(async () => {
           </a-collapse-item>
         </a-collapse>
 
-        <template v-else>
-        <div class="form-section">
-          <h2 class="section-title">基本信息</h2>
-          <a-row :gutter="20">
-            <a-col :xs="24" :sm="12">
-              <a-form-item label="真实姓名" required>
-                <a-input v-model="form.realName" placeholder="与学籍一致" size="large" />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :sm="12">
-              <a-form-item label="在读身份" required>
-                <a-select v-model="form.studentIdentity" size="large">
-                  <a-option v-for="item in identityOptions" :key="item.value" :value="item.value">{{ item.label }}</a-option>
-                </a-select>
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :sm="12">
-              <a-form-item label="学校" required>
-                <a-input v-model="form.school" placeholder="例如 武汉大学" size="large" />
-              </a-form-item>
-            </a-col>
-            <a-col :xs="24" :sm="12">
-              <a-form-item label="学院" required>
-                <a-input v-model="form.college" placeholder="例如 计算机学院" size="large" />
-              </a-form-item>
-            </a-col>
-            <a-col :span="24">
-              <a-form-item label="专业" required>
-                <a-input v-model="form.major" placeholder="例如 软件工程" size="large" />
-              </a-form-item>
-            </a-col>
-          </a-row>
-        </div>
+        <div v-else class="desktop-resume-fields">
+          <div class="form-section">
+            <h2 class="section-title">基本信息</h2>
+            <a-form-item label="真实姓名" required>
+              <a-input v-model="form.realName" placeholder="与学籍一致" size="large" />
+            </a-form-item>
+            <a-form-item label="在读身份" required>
+              <a-select v-model="form.studentIdentity" size="large">
+                <a-option v-for="item in identityOptions" :key="item.value" :value="item.value">{{ item.label }}</a-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item label="学校" required>
+              <a-input v-model="form.school" placeholder="例如 武汉大学" size="large" />
+            </a-form-item>
+            <a-form-item label="学院" required>
+              <a-input v-model="form.college" placeholder="例如 计算机学院" size="large" />
+            </a-form-item>
+            <a-form-item label="专业" required>
+              <a-input v-model="form.major" placeholder="例如 软件工程" size="large" />
+            </a-form-item>
+          </div>
 
-        <div class="form-section">
-          <h2 class="section-title">个人简介</h2>
-          <a-form-item hide-label required>
-            <a-textarea
-              v-model="form.bio"
-              :auto-size="{ minRows: 6, maxRows: 14 }"
-              placeholder="介绍学习经历、项目经验、可投入时间等，至少 20 字"
-            />
-          </a-form-item>
-        </div>
+          <div class="form-section">
+            <h2 class="section-title">个人简介</h2>
+            <a-form-item hide-label required>
+              <a-textarea
+                v-model="form.bio"
+                :auto-size="{ minRows: 6, maxRows: 14 }"
+                placeholder="介绍学习经历、项目经验、可投入时间等，至少 20 字"
+              />
+            </a-form-item>
+          </div>
 
-        <div class="form-section">
-          <h2 class="section-title">简历附件 <span class="optional">可选</span></h2>
-          <a-form-item hide-label>
-            <div class="upload-row">
-              <a-upload :custom-request="onUpload" :show-file-list="false" accept=".pdf,application/pdf">
-                <a-button>上传 PDF</a-button>
-              </a-upload>
-              <div v-if="form.resumeFileUrl" class="file-row">
-                <a :href="form.resumeFileUrl" target="_blank" rel="noopener">{{ form.resumeFileName || '查看附件' }}</a>
-                <button type="button" class="linkish" @click="clearFile">移除</button>
+          <div class="form-section">
+            <h2 class="section-title">简历附件 <span class="optional">可选</span></h2>
+            <a-form-item hide-label>
+              <div class="upload-row">
+                <a-upload :custom-request="onUpload" :show-file-list="false" accept=".pdf,application/pdf">
+                  <a-button type="outline">
+                    <template #icon><icon-upload /></template>
+                    点击上传
+                  </a-button>
+                </a-upload>
+                <div v-if="form.resumeFileUrl" class="file-row">
+                  <a :href="form.resumeFileUrl" target="_blank" rel="noopener">{{ form.resumeFileName || '查看附件' }}</a>
+                  <button type="button" class="linkish" @click="clearFile">移除</button>
+                </div>
               </div>
-            </div>
-          </a-form-item>
+            </a-form-item>
+          </div>
         </div>
-
-        </template>
 
         <div class="form-actions" :class="{ sticky: isMobile }">
           <a-button type="primary" size="large" long :loading="saving" @click="save">保存简历</a-button>
@@ -235,8 +226,13 @@ onMounted(async () => {
 <style scoped>
 .resume-page {
   width: 100%;
-  max-width: 720px;
+  max-width: 640px;
   margin: 0 auto;
+}
+.desktop-resume-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .page-head {
   display: flex;

@@ -124,7 +124,10 @@ async function submit() {
           </a>
         </div>
         <p v-if="project.completion.reviewNote" class="review-note">审阅意见：{{ project.completion.reviewNote }}</p>
-        <a-space v-if="isPublisher && project.completion.status === 'SUBMITTED'" style="margin-top: 16px">
+        <a-space
+          v-if="isPublisher && project.status === 'COMPLETING' && project.completion.status === 'SUBMITTED'"
+          style="margin-top: 16px"
+        >
           <a-button
             type="primary"
             :loading="saving"
@@ -141,7 +144,7 @@ async function submit() {
         </a-space>
       </template>
 
-      <div v-if="isStudent && project.completion?.status !== 'APPROVED'" class="submit-box">
+      <div v-if="isStudent && project.status === 'ACTIVE' && (!project.completion || project.completion.status === 'REJECTED')" class="submit-box">
         <div class="section-label" style="margin-bottom: 12px">
           {{ project.completion ? '重新提交结项材料' : '提交结项材料' }}
         </div>
@@ -201,7 +204,7 @@ async function submit() {
       </div>
 
       <a-empty
-        v-if="!project.completion && !isStudent"
+        v-if="!project.completion && (!isStudent || project.status !== 'ACTIVE')"
         description="尚未提交结项材料"
       />
     </a-card>

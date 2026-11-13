@@ -43,16 +43,17 @@ const tutorialDocUrl = computed(() => {
   return tutorialDocUrlStudent.value
 })
 const showMobileTutorial = computed(
-  () => isMobile.value && route.path === '/' && Boolean(tutorialDocUrl.value),
+  () => isMobile.value && route.path === '/plaza' && Boolean(tutorialDocUrl.value),
 )
 
 const selectedKeys = computed(() => {
   const path = route.path
+  if (path === '/' || path.startsWith('/ability')) return ['/']
+  if (path.startsWith('/plaza') || path.startsWith('/tasks/')) return ['/plaza']
   if (path.startsWith('/me/resume') || path === '/me') return ['/me']
   if (path.startsWith('/me/workbench') || path.startsWith('/me/projects') || path.startsWith('/me/applications')) {
     return ['/me/workbench']
   }
-  if (path.startsWith('/ability')) return ['/ability']
   if (path.startsWith('/publisher/tasks')) return ['/publisher/tasks']
   if (path.startsWith('/publisher/inbox') || path.startsWith('/publisher/projects')) return ['/publisher/inbox']
   if (path.startsWith('/admin/')) {
@@ -65,24 +66,25 @@ const selectedKeys = computed(() => {
 })
 
 const studentMenus = [
-  { key: '/', label: '任务广场' },
+  { key: '/', label: '首页' },
+  { key: '/plaza', label: '任务广场' },
   { key: '/me/workbench', label: '工作台' },
-  { key: '/ability', label: 'WHU Dev' },
-  { key: '/messages', label: '私信' },
 ]
 const publisherMenus = computed(() => [
-  { key: '/', label: '任务广场' },
+  { key: '/', label: '首页' },
+  { key: '/plaza', label: '任务广场' },
   { key: '/publisher/tasks', label: '我的任务' },
   {
     key: '/publisher/inbox',
     label: pendingApplications.value > 0 ? `审阅 (${pendingApplications.value})` : '审阅',
   },
-  { key: '/ability', label: 'WHU Dev' },
-  { key: '/messages', label: '私信' },
 ])
+const showDesktopMessages = computed(
+  () => user.value?.role === 'STUDENT' || user.value?.role === 'PUBLISHER',
+)
 const adminMenus = [
-  { key: '/', label: '任务广场' },
-  { key: '/ability', label: 'WHU Dev' },
+  { key: '/', label: '首页' },
+  { key: '/plaza', label: '任务广场' },
   { key: '/admin/users', label: '用户' },
   { key: '/admin/tasks', label: '任务' },
   { key: '/admin/dicts', label: '字典' },
@@ -90,8 +92,8 @@ const adminMenus = [
   { key: '/admin/settings', label: '设置' },
 ]
 const guestMenus = [
-  { key: '/', label: '任务广场' },
-  { key: '/ability', label: 'WHU Dev' },
+  { key: '/', label: '首页' },
+  { key: '/plaza', label: '任务广场' },
 ]
 
 const menus = computed(() => {
@@ -102,8 +104,8 @@ const menus = computed(() => {
 })
 
 const studentTabs: TabItem[] = [
-  { key: '/', label: '职位', icon: 'jobs', match: (path) => path === '/' },
-  { key: '/ability', label: 'WHU Dev', icon: 'topdev', match: (path) => path.startsWith('/ability') },
+  { key: '/', label: '首页', icon: 'topdev', match: (path) => path === '/' || path.startsWith('/ability') },
+  { key: '/plaza', label: '职位', icon: 'jobs', match: (path) => path === '/plaza' || path.startsWith('/tasks/') },
   {
     key: '/me/workbench',
     label: '工作台',
@@ -120,7 +122,8 @@ const studentTabs: TabItem[] = [
 ]
 
 const publisherTabs = computed<TabItem[]>(() => [
-  { key: '/', label: '职位', icon: 'jobs', match: (path) => path === '/' },
+  { key: '/', label: '首页', icon: 'topdev', match: (path) => path === '/' || path.startsWith('/ability') },
+  { key: '/plaza', label: '职位', icon: 'jobs', match: (path) => path === '/plaza' || path.startsWith('/tasks/') },
   { key: '/publisher/tasks', label: '任务', icon: 'tasks', match: (path) => path.startsWith('/publisher/tasks') },
   {
     key: '/publisher/inbox',
@@ -128,12 +131,11 @@ const publisherTabs = computed<TabItem[]>(() => [
     icon: 'inbox',
     match: (path) => path.startsWith('/publisher/inbox') || path.startsWith('/publisher/projects'),
   },
-  { key: '/messages', label: '消息', icon: 'messages', match: (path) => path.startsWith('/messages') },
 ])
 
 const guestTabs: TabItem[] = [
-  { key: '/', label: '职位', icon: 'jobs', match: (path) => path === '/' },
-  { key: '/ability', label: 'WHU Dev', icon: 'topdev', match: (path) => path.startsWith('/ability') },
+  { key: '/', label: '首页', icon: 'topdev', match: (path) => path === '/' || path.startsWith('/ability') },
+  { key: '/plaza', label: '职位', icon: 'jobs', match: (path) => path === '/plaza' || path.startsWith('/tasks/') },
   { key: '/auth/login', label: '登录', icon: 'login', match: (path) => path.startsWith('/auth') },
 ]
 
@@ -142,7 +144,8 @@ const mobileTabs = computed(() => {
   if (user.value?.role === 'PUBLISHER') return publisherTabs.value
   if (user.value?.role === 'ADMIN') {
     return [
-      { key: '/', label: '广场', icon: 'jobs' as const, match: (path: string) => path === '/' },
+      { key: '/', label: '首页', icon: 'topdev' as const, match: (path: string) => path === '/' || path.startsWith('/ability') },
+      { key: '/plaza', label: '广场', icon: 'jobs' as const, match: (path: string) => path === '/plaza' || path.startsWith('/tasks/') },
       { key: '/admin/dicts', label: '字典', icon: 'tasks' as const, match: (path: string) => path.startsWith('/admin/dicts') },
       { key: '/admin/users', label: '用户', icon: 'users' as const, match: (path: string) => path.startsWith('/admin/users') },
       {
@@ -179,13 +182,13 @@ const hideMobileTab = computed(() => {
 
 const mobileTitle = computed(() => {
   const path = route.path
-  if (path === '/') return '职位'
+  if (path === '/' || path.startsWith('/ability')) return 'WHU Dev'
+  if (path === '/plaza') return '任务广场'
   if (path.startsWith('/messages')) return '消息'
   if (path.startsWith('/me/workbench')) return '工作台'
   if (path === '/me' || path.startsWith('/me/resume')) return '我的'
   if (path.startsWith('/publisher/tasks')) return '我的任务'
   if (path.startsWith('/publisher/inbox')) return '审阅'
-  if (path.startsWith('/ability')) return 'WHU Dev'
   if (path.startsWith('/tasks/')) return '职位详情'
   return 'WHU Dev'
 })
@@ -324,7 +327,7 @@ watch(() => auth.token, refreshUnread)
 watch(
   () => route.path,
   (path) => {
-    if (path === '/') void loadSiteConfig()
+    if (path === '/' || path === '/plaza') void loadSiteConfig()
     if (!drawerVisible.value) refreshUnread()
   },
 )
@@ -399,20 +402,24 @@ function formatTime(value: string) {
             v-if="user.role === 'STUDENT'"
             type="text"
             size="small"
-            class="resume-link"
+            class="personal-link"
             :class="{ active: route.path.startsWith('/me/resume') }"
             @click="router.push('/me/resume')"
           >
             简历
           </a-button>
-          <a-tag color="arcoblue" size="small">
-            {{
-              user.role === 'STUDENT'
-                ? user.abilityLabel || user.abilityLevel || 'LV0'
-                : user.role === 'PUBLISHER'
-                  ? '发布方'
-                  : '管理'
-            }}
+          <a-button
+            v-if="showDesktopMessages"
+            type="text"
+            size="small"
+            class="personal-link"
+            :class="{ active: route.path.startsWith('/messages') }"
+            @click="router.push('/messages')"
+          >
+            消息
+          </a-button>
+          <a-tag v-if="user.role !== 'STUDENT'" color="arcoblue" size="small">
+            {{ user.role === 'PUBLISHER' ? '发布方' : '管理' }}
           </a-tag>
           <span style="font-size: 13px; color: var(--color-text-2)">{{ user.displayName }}</span>
           <a-badge class="header-notify-badge" :count="unread" :max-count="99">
@@ -459,8 +466,14 @@ function formatTime(value: string) {
     </template>
 
     <a-layout-content>
-      <div class="page" :class="{ 'page-mobile': isMobile }">
-        <router-view />
+      <div class="page" :class="{ 'page-mobile': isMobile, 'desktop-admin': !isMobile && route.path.startsWith('/admin/') }">
+        <nav v-if="!isMobile && user?.role === 'ADMIN' && route.path.startsWith('/admin/')" class="desktop-list admin-nav" aria-label="管理后台">
+          <router-link v-for="item in adminMenus.filter(item => item.key.startsWith('/admin/'))" :key="item.key"
+            :to="item.key" class="desktop-list-item">{{ item.label }}</router-link>
+        </nav>
+        <main class="page-content">
+          <router-view />
+        </main>
       </div>
     </a-layout-content>
 
@@ -650,12 +663,12 @@ function formatTime(value: string) {
   height: auto;
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
 }
-.resume-link {
+.personal-link {
   color: #4b5563;
   font-weight: 500;
 }
-.resume-link.active,
-.resume-link:hover {
+.personal-link.active,
+.personal-link:hover {
   color: #111827;
   font-weight: 700;
 }

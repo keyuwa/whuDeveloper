@@ -185,12 +185,12 @@ onMounted(() => {
     <header v-if="!isMobile" class="page-head">
       <div>
         <a-typography-title :heading="4" style="margin: 0">工作台</a-typography-title>
-        <p class="subtitle">已接项目、已投申请与备选收藏，按助教 / 开发 / 科研 / 项目分栏查看。</p>
+        <p class="subtitle">查看项目进展、申请结果和备选项目。</p>
       </div>
-      <router-link to="/" class="discover-link">探索新项目 ↗</router-link>
+      <router-link to="/plaza" class="discover-link">探索新项目 ↗</router-link>
     </header>
     <div v-else class="mobile-wb-head">
-      <router-link to="/" class="discover-link">探索新项目 ↗</router-link>
+      <router-link to="/plaza" class="discover-link">探索新项目 ↗</router-link>
     </div>
 
     <nav class="role-tabs" :class="{ compact: isMobile }" aria-label="任务类型">
@@ -200,6 +200,7 @@ onMounted(() => {
         type="button"
         class="role-tab"
         :class="{ active: roleTab === item.value }"
+        :aria-pressed="roleTab === item.value"
         @click="roleTab = item.value"
       >
         <span class="role-name">{{ isMobile ? item.shortLabel : item.label }}</span>
@@ -207,7 +208,8 @@ onMounted(() => {
       </button>
     </nav>
 
-    <a-tabs class="workspace-tabs" :active-key="tab" type="rounded" :size="isMobile ? 'medium' : 'large'" @change="switchTab">
+    <div class="workbench-main">
+    <a-tabs class="workspace-tabs" :active-key="tab" :type="isMobile ? 'rounded' : 'line'" :size="isMobile ? 'medium' : 'large'" @change="switchTab">
       <a-tab-pane key="enrolled" :title="`已接项目 · ${orderedProjects.length}`" />
       <a-tab-pane key="applications" :title="`已申请 · ${filteredApplications.length}`" />
       <a-tab-pane key="candidates" :title="`备选项目 · ${filteredShortlists.length}`" />
@@ -256,7 +258,7 @@ onMounted(() => {
             v-for="item in filteredApplications"
             :key="item.id"
             class="task-card-link"
-            :to="`/tasks/${item.taskId}`"
+            :to="{ path: `/tasks/${item.taskId}`, query: { from: 'workbench', tab: 'applications' } }"
           >
             <a-card class="task-card work-card" hoverable>
               <div class="card-top">
@@ -302,7 +304,7 @@ onMounted(() => {
                 </a-space>
               </div>
               <a-typography-title :heading="6" style="margin: 14px 0 10px">
-                <router-link class="title-link" :to="`/tasks/${item.id}`">{{ item.title }}</router-link>
+                <router-link class="title-link" :to="{ path: `/tasks/${item.id}`, query: { from: 'workbench', tab: 'candidates' } }">{{ item.title }}</router-link>
               </a-typography-title>
               <div class="card-meta">
                 <span>发布方 {{ item.publisherName }}</span>
@@ -312,64 +314,87 @@ onMounted(() => {
                 <a-button size="mini" status="danger" type="outline" :loading="loading" @click="removeShortlist(item.id)">
                   取消备选
                 </a-button>
-                <router-link class="detail-link" :to="`/tasks/${item.id}`">查看详情 →</router-link>
+                <router-link class="detail-link" :to="{ path: `/tasks/${item.id}`, query: { from: 'workbench', tab: 'candidates' } }">查看详情 →</router-link>
               </div>
             </a-card>
           </div>
         </div>
       </template>
     </a-spin>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .workbench { max-width: 100%; margin: 0 auto; padding: 8px 0 40px; }
-.page-head { align-items: center; margin-bottom: 22px; }
+.page-head { align-items: center; margin-bottom: 18px; }
 .discover-link { color: #2563eb; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.workbench-main { min-width: 0; }
 .role-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0 0 14px;
+  padding: 0 10px;
+  background: #fff;
+  border: 1px solid var(--desktop-line, #e2e8f0);
+  border-radius: 12px;
 }
 .role-tab {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 8px;
-  border: 1px solid #eef2f7;
-  border-radius: 12px;
-  background: #fff;
-  padding: 12px 14px;
+  margin: 0;
+  padding: 13px 16px 11px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   cursor: pointer;
-  text-align: left;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  text-align: center;
+  font: inherit;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
-.role-tab:hover { border-color: #bfdbfe; }
+.role-tab:hover .role-name { color: #1d4ed8; }
 .role-tab.active {
-  border-color: #2563eb;
-  background: linear-gradient(180deg, #eff6ff 0%, #fff 70%);
-  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.1);
+  border-bottom-color: var(--desktop-accent, #2563eb);
+  background: transparent;
+  box-shadow: none;
 }
 .role-name {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 650;
   color: #111827;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .role-tab.active .role-name { color: #1d4ed8; }
 .role-count {
+  min-width: 1.25em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
   font-size: 12px;
-  color: #6b7280;
+  color: #64748b;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
+.role-tab.active .role-count {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
 .role-tabs.compact {
+  display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
+  margin-bottom: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .role-tabs.compact .role-tab {
   flex-direction: column;
@@ -377,13 +402,24 @@ onMounted(() => {
   justify-content: center;
   gap: 2px;
   padding: 8px 4px;
+  border: 1px solid #eef2f7;
   border-radius: 10px;
+  background: #fff;
   text-align: center;
+}
+.role-tabs.compact .role-tab.active {
+  border-color: #2563eb;
+  background: linear-gradient(180deg, #eff6ff 0%, #fff 70%);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.1);
 }
 .role-tabs.compact .role-name { font-size: 13px; white-space: nowrap; }
 .role-tabs.compact .role-count {
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  padding: 0;
+  background: transparent;
+}
+.role-tabs.compact .role-tab.active .role-count {
+  background: transparent;
 }
 .task-grid { display: flex; flex-direction: column; gap: 12px; background: transparent; border: 0; border-radius: 0; overflow: visible; }
 .task-card-link + .task-card-link { border-top: 0; }

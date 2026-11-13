@@ -389,7 +389,12 @@ async function save(publish: boolean) {
     >
       手机端可查看与轻量编辑；完整发岗字段较多，推荐在电脑浏览器完成。
     </a-alert>
-    <a-form ref="formRef" :model="form" layout="vertical">
+    <nav v-if="!isMobile" class="desktop-form-nav" aria-label="发布表单">
+      <a href="#posting-basics">职位信息</a>
+      <a href="#posting-description">项目说明</a>
+      <a v-if="isIntern" href="#posting-documents">项目文档</a>
+    </nav>
+    <a-form id="posting-basics" ref="formRef" :model="form" layout="vertical">
       <a-form-item field="title" label="项目名称" :rules="[{ required: true, message: '请填写名称' }]">
         <a-input v-model="form.title" />
       </a-form-item>
@@ -509,7 +514,7 @@ async function save(publish: boolean) {
       <a-form-item v-if="isIntern" label="仓库">
         <a-input v-model="form.repoUrl" placeholder="可选：代码仓库链接" />
       </a-form-item>
-      <a-form-item :label="isRa ? '背景与开放方向' : '背景与目标'" required>
+      <a-form-item id="posting-description" :label="isRa ? '背景与开放方向' : '背景与目标'" required>
         <a-textarea
           v-model="form.background"
           :auto-size="{ minRows: 3 }"
@@ -548,7 +553,7 @@ async function save(publish: boolean) {
       </a-form-item>
       <a-form-item label="学习资料"><a-textarea v-model="form.learningMaterials" placeholder="可选：链接、书单等" /></a-form-item>
 
-      <section v-if="isIntern" class="doc-section">
+      <section v-if="isIntern" id="posting-documents" class="doc-section">
         <div class="doc-head">
           <div>
             <h3>项目文档</h3>
@@ -632,6 +637,9 @@ async function save(publish: boolean) {
 </template>
 
 <style scoped>
+.desktop-form-nav { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 18px; padding: 12px 0; border-bottom: 1px solid var(--desktop-line); }
+#posting-basics, #posting-description, #posting-documents { scroll-margin-top: 86px; }
+
 .doc-section {
   margin-top: 8px;
   padding: 18px;

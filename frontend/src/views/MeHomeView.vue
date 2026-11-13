@@ -37,10 +37,8 @@ function onLogout() {
         <div class="avatar">{{ (user.displayName || 'U').slice(0, 1) }}</div>
         <div class="me-meta">
           <h1>{{ user.displayName }}</h1>
-          <p>
-            {{ user.abilityLabel || user.abilityLevel || 'LV0' }}
-            <template v-if="user.school"> · {{ user.school }}</template>
-          </p>
+          <p v-if="user.school">{{ user.school }}</p>
+          <p v-else>学生账号</p>
         </div>
       </template>
       <template v-else>

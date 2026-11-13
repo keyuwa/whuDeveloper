@@ -26,11 +26,12 @@ import AbilityRubricView from './views/AbilityRubricView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
-  scrollBehavior() {
-    return { top: 0 }
+  scrollBehavior(_to, _from, savedPosition) {
+    return savedPosition || { top: 0 }
   },
   routes: [
-    { path: '/', component: PlazaView },
+    { path: '/', component: AbilityView },
+    { path: '/plaza', component: PlazaView },
     { path: '/tasks/:id', component: TaskDetailView },
     { path: '/auth/login', component: LoginView },
     { path: '/auth/register', component: RegisterView },
@@ -55,7 +56,7 @@ export const router = createRouter({
       ],
     },
     { path: '/messages', component: MessagesView },
-    { path: '/ability', component: AbilityView },
+    { path: '/ability', redirect: '/' },
     { path: '/ability/rubric', component: AbilityRubricView },
     { path: '/publisher/tasks', component: PublisherTasksView, meta: { role: 'PUBLISHER' } },
     { path: '/publisher/tasks/new', component: TaskFormView, meta: { role: 'PUBLISHER' } },

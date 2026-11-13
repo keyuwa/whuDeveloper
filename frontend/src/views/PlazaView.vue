@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import TaskDetailView from './TaskDetailView.vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
@@ -8,6 +9,8 @@ import { useIsMobile } from '../composables/useDevice'
 import { loadDicts, dictOptions, scheduleLabelMap } from '../composables/useDicts'
 import { readCachedSiteConfig, writeCachedSiteConfig } from '../siteConfigCache'
 import { TASK_ROLE_LABEL, TASK_ROLE_TYPES, type Task, type TaskPage } from '../types'
+
+defineOptions({ name: 'PlazaView' })
 
 const isMobile = useIsMobile()
 const PAGE_SIZE = 20
@@ -34,12 +37,59 @@ const loadingMore = ref(false)
 const page = ref(0)
 const hasMore = ref(true)
 const totalCount = ref(0)
-const showPcPager = computed(() => !isMobile.value && totalCount.value > PAGE_SIZE)
 const loadError = ref(false)
 const activeModule = ref<'TA' | 'INTERN' | 'RA' | 'TEAM'>('INTERN')
 const filterDrawerVisible = ref(false)
 const loadMoreSentinel = ref<HTMLElement | null>(null)
+const desktopListRef = ref<HTMLElement | null>(null)
+const desktopDetailRef = ref<HTMLElement | null>(null)
+const chromeCollapsed = ref(false)
+const detailAwayFromTop = ref(false)
+const COLLAPSE_SCROLL_AT = 120
+const EXPAND_SCROLL_AT = 12
 let loadMoreObserver: IntersectionObserver | null = null
+let windowScrollBound = false
+let loadMoreLocked = false
+
+function syncPlazaCompactClass() {
+  const on = chromeCollapsed.value && !isMobile.value
+  document.documentElement.classList.toggle('plaza-compact', on)
+}
+
+function setChromeCollapsed(next: boolean) {
+  if (isMobile.value) return
+  if (chromeCollapsed.value === next) return
+  chromeCollapsed.value = next
+  syncPlazaCompactClass()
+}
+
+function onWindowScroll() {
+  if (isMobile.value) return
+  const y = window.scrollY || document.documentElement.scrollTop
+  if (!chromeCollapsed.value && y > COLLAPSE_SCROLL_AT) setChromeCollapsed(true)
+  else if (chromeCollapsed.value && y <= EXPAND_SCROLL_AT) setChromeCollapsed(false)
+}
+
+function onDetailScroll(event: Event) {
+  const el = event.currentTarget as HTMLElement | null
+  if (!el) return
+  detailAwayFromTop.value = el.scrollTop > 16
+}
+
+function scrollDetailToTop() {
+  const pane = desktopDetailRef.value
+  if (!pane) return
+  pane.scrollTo({ top: 0, behavior: 'smooth' })
+  detailAwayFromTop.value = false
+}
+
+watch(isMobile, () => {
+  if (isMobile.value) {
+    chromeCollapsed.value = false
+    detailAwayFromTop.value = false
+    syncPlazaCompactClass()
+  }
+})
 const cachedSite = readCachedSiteConfig()
 const tutorialDocUrlStudent = ref(cachedSite?.tutorialDocUrlStudent || '')
 const tutorialDocUrlPublisher = ref(cachedSite?.tutorialDocUrlPublisher || '')
@@ -47,7 +97,6 @@ const tutorialDocUrl = computed(() => {
   if (auth.user?.role === 'PUBLISHER') return tutorialDocUrlPublisher.value
   return tutorialDocUrlStudent.value
 })
-const HERO_DESC = '从课堂到开源，从想法到实践。发现适合你的项目，与志同道合的人一起完成。'
 const DEFAULT_MODULE_BLURBS: Record<string, string> = {
   TA: '助教任务：课程支持、答疑与教学协作',
   INTERN: '开发任务：产品功能、工程实现与开源贡献',
@@ -84,18 +133,28 @@ const educationOptions = dictOptions('STUDENT_IDENTITY')
 const languageOptions = dictOptions('PROGRAMMING_LANGUAGE')
 const scheduleLabels = scheduleLabelMap()
 
+const isIntern = computed(() => activeModule.value === 'INTERN')
+const isTa = computed(() => activeModule.value === 'TA')
+const isTeam = computed(() => activeModule.value === 'TEAM')
 const activeModuleMeta = computed(
   () => modules.value.find((item) => item.value === activeModule.value) || modules.value[1],
 )
-const isIntern = computed(() => activeModule.value === 'INTERN')
-const isTa = computed(() => activeModule.value === 'TA')
-const isRa = computed(() => activeModule.value === 'RA')
-const isTeam = computed(() => activeModule.value === 'TEAM')
 
 interface FilterSection {
   key: FilterKey
   label: string
   options: { label: string; value: string }[]
+}
+
+const filterSelectTriggerProps = {
+  autoFitPopupWidth: false,
+  autoFitPopupMinWidth: false,
+  contentClass: 'plaza-filter-dropdown',
+  contentStyle: {
+    minWidth: '280px',
+    width: 'max-content',
+    maxWidth: '420px',
+  },
 }
 
 const filterSections = computed<FilterSection[]>(() => {
@@ -140,7 +199,7 @@ const tasks = computed(() => {
       if (
         filters.programmingLanguages.length &&
         !filters.programmingLanguages.some((lang) =>
-          task.programmingLanguages
+          (task.programmingLanguages || '')
             .split(/[,，、/|]+/)
             .map((part) => part.trim())
             .includes(lang),
@@ -178,6 +237,15 @@ const tasks = computed(() => {
       .toLowerCase()
       .includes(keyword)
   })
+})
+
+const selectedTaskId = ref<number | null>(null)
+const selectedTask = computed(() => tasks.value.find(task => task.id === selectedTaskId.value) ?? tasks.value[0])
+
+watch(selectedTaskId, async () => {
+  detailAwayFromTop.value = false
+  await nextTick()
+  desktopDetailRef.value?.scrollTo({ top: 0 })
 })
 
 const selectedChips = computed<SelectedChip[]>(() => {
@@ -315,29 +383,32 @@ async function loadModuleList() {
 }
 
 async function loadMore() {
-  if (!isMobile.value || !hasMore.value || loading.value || loadingMore.value) return
-  await fetchPage(page.value + 1, true)
-}
-
-async function onPcPageChange(current: number) {
-  if (isMobile.value) return
-  await fetchPage(Math.max(current - 1, 0), false)
-  const anchor = document.getElementById('opportunities')
-  if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  else window.scrollTo({ top: 0, behavior: 'smooth' })
+  if (!hasMore.value || loading.value || loadingMore.value || loadMoreLocked) return
+  loadMoreLocked = true
+  try {
+    await fetchPage(page.value + 1, true)
+  } finally {
+    await nextTick()
+    loadMoreLocked = false
+    observeLoadMore()
+  }
 }
 
 function observeLoadMore() {
   loadMoreObserver?.disconnect()
   loadMoreObserver = null
-  if (!isMobile.value) return
+  if (isMobile.value === false && !tasks.value.length && !hasMore.value) return
   const el = loadMoreSentinel.value
-  if (!el) return
+  if (!el || !hasMore.value) return
   loadMoreObserver = new IntersectionObserver(
     (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadMore()
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      if (!hasMore.value || loading.value || loadingMore.value || loadMoreLocked) return
+      loadMoreObserver?.disconnect()
+      loadMoreObserver = null
+      void loadMore()
     },
-    { root: null, rootMargin: '240px 0px', threshold: 0 },
+    { root: null, rootMargin: '160px 0px', threshold: 0 },
   )
   loadMoreObserver.observe(el)
 }
@@ -357,6 +428,8 @@ async function switchModule(value: 'TA' | 'INTERN' | 'RA' | 'TEAM') {
   activeModule.value = value
   resetFilters()
   filterDrawerVisible.value = false
+  setChromeCollapsed(false)
+  window.scrollTo({ top: 0 })
   await loadModuleList()
 }
 
@@ -427,127 +500,104 @@ async function loadSiteConfig() {
   }
 }
 
+function bindPlazaWindowScroll() {
+  if (windowScrollBound) return
+  window.addEventListener('scroll', onWindowScroll, { passive: true })
+  windowScrollBound = true
+  onWindowScroll()
+}
+
+function unbindPlazaWindowScroll() {
+  if (!windowScrollBound) return
+  window.removeEventListener('scroll', onWindowScroll)
+  windowScrollBound = false
+}
+
 onMounted(() => {
   // Show spinner immediately; do not wait on dicts/config or first paint looks empty.
   loading.value = true
   void loadModuleList()
   void loadDicts()
   void loadSiteConfig()
+  bindPlazaWindowScroll()
 })
 
-onUnmounted(() => {
+onActivated(() => {
+  observeLoadMore()
+  syncPlazaCompactClass()
+  bindPlazaWindowScroll()
+})
+
+function disconnectLoadMore() {
   loadMoreObserver?.disconnect()
   loadMoreObserver = null
+}
+
+function clearPlazaCompact() {
+  chromeCollapsed.value = false
+  detailAwayFromTop.value = false
+  document.documentElement.classList.remove('plaza-compact')
+}
+
+onDeactivated(() => {
+  disconnectLoadMore()
+  unbindPlazaWindowScroll()
+  clearPlazaCompact()
+})
+onUnmounted(() => {
+  disconnectLoadMore()
+  unbindPlazaWindowScroll()
+  clearPlazaCompact()
 })
 </script>
 
 <template>
-  <section class="plaza" :class="{ 'plaza-mobile': isMobile }">
-    <section v-if="!isMobile" class="hero" aria-label="平台介绍">
-      <div class="hero-glow" aria-hidden="true" />
-      <div class="hero-grid" aria-hidden="true" />
-      <div class="hero-inner">
-        <p class="hero-eyebrow"><span></span> WHU DEVELOPER · 校园协作社区</p>
-        <h1 class="hero-title">把热爱写进项目，<br />让成长<span>真实发生。</span></h1>
-        <p class="hero-desc">{{ HERO_DESC }}</p>
-        <div class="hero-actions">
-          <a href="#opportunities" class="hero-cta primary">探索开放任务 <span aria-hidden="true">↗</span></a>
-          <a
-            v-if="tutorialDocUrl"
-            class="hero-cta secondary"
-            :href="tutorialDocUrl"
-            target="_blank"
-            rel="noopener"
-          >
-            使用教程
-          </a>
+  <section class="plaza" :class="{ 'plaza-mobile': isMobile, 'is-compact': chromeCollapsed && !isMobile }">
+    <div v-if="!isMobile" class="browse-board">
+      <header id="opportunities" class="browse-head">
+        <div>
+          <h1>任务广场</h1>
+          <a v-if="tutorialDocUrl" :href="tutorialDocUrl" target="_blank" rel="noopener">使用教程</a>
         </div>
-      </div>
-      <div class="hero-art" aria-hidden="true">
-        <div class="art-orbit"></div>
-        <div class="art-center"><span>WHU</span><small>IDEAS INTO IMPACT</small></div>
-        <div class="art-card art-teach"><span class="art-symbol">Aa</span><div><strong>助教</strong><small>SHARE KNOWLEDGE</small></div></div>
-        <div class="art-card art-code"><span class="art-symbol">&lt;/&gt;</span><div><strong>开发</strong><small>BUILD SOMETHING</small></div></div>
-        <div class="art-card art-research"><span class="art-symbol">✳</span><div><strong>科研</strong><small>EXPLORE THE UNKNOWN</small></div></div>
-        <div class="art-card art-project"><span class="art-symbol">◇</span><div><strong>项目</strong><small>JOIN THE WORK</small></div></div>
-        <div class="art-caption">四个频道 · 一起创造</div>
-      </div>
-    </section>
-    <header id="opportunities" class="page-head" :class="{ 'page-head-mobile': isMobile }">
-      <div v-if="!isMobile">
-        <a-typography-title :heading="4" style="margin: 0">任务广场</a-typography-title>
-        <p class="subtitle">先选频道；每个频道使用各自适配的筛选条件。</p>
-      </div>
-      <p v-else class="mobile-count">{{ resultCount }} 个开放职位</p>
-      <a-typography-text v-if="!isMobile" type="secondary">本频道 {{ resultCount }} 个项目</a-typography-text>
+      </header>
+
+      <nav class="module-tabs" aria-label="任务频道">
+        <button
+          v-for="item in modules"
+          :key="item.value"
+          type="button"
+          class="module-tab"
+          :class="{ active: activeModule === item.value }"
+          :aria-pressed="activeModule === item.value"
+          :title="item.blurb"
+          @click="switchModule(item.value)"
+        >
+          <span class="module-name">{{ item.label }}</span>
+        </button>
+      </nav>
+      <p class="channel-note">{{ activeModuleMeta.blurb }}</p>
+    </div>
+
+    <header v-if="isMobile" id="opportunities" class="page-head page-head-mobile">
+      <p class="mobile-count">{{ resultCount }} 个开放职位</p>
     </header>
 
-    <nav class="module-tabs" :class="{ compact: isMobile }" aria-label="任务频道">
+    <nav v-if="isMobile" class="module-tabs compact" aria-label="任务频道">
       <button
         v-for="item in modules"
         :key="item.value"
         type="button"
         class="module-tab"
         :class="{ active: activeModule === item.value }"
+        :aria-pressed="activeModule === item.value"
         @click="switchModule(item.value)"
       >
-        <span class="module-name">{{ isMobile ? item.shortLabel : item.label }}</span>
-        <span v-if="!isMobile" class="module-blurb">{{ item.blurb }}</span>
+        <span class="module-name">{{ item.shortLabel }}</span>
       </button>
     </nav>
-    <p v-if="!isMobile" class="module-hint">{{ activeModuleMeta.blurb }}</p>
-
-    <!-- Desktop filters -->
-    <section v-if="!isMobile" class="filter-panel">
-      <div class="filter-body">
-        <div v-for="section in filterSections" :key="section.key" class="filter-row">
-          <span class="filter-label">{{ section.label }}</span>
-          <div class="chip-group wrap">
-            <button
-              v-for="item in section.options"
-              :key="`${section.key}-${item.value}`"
-              type="button"
-              class="chip"
-              :class="{ active: isSelected(section.key, item.value) }"
-              @click="toggleFilter(section.key, item.value)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
-        </div>
-        <div class="filter-row tools">
-          <span class="filter-label">关键词</span>
-          <div class="tool-group">
-            <a-input
-              v-model="filters.keyword"
-              allow-clear
-              placeholder="搜索标题 / 发布方"
-              style="width: min(280px, 100%)"
-            />
-            <a-button @click="resetFilters">清空已选</a-button>
-          </div>
-        </div>
-        <div class="selected-bar">
-          <span class="selected-label">已选</span>
-          <div v-if="selectedChips.length" class="selected-chips">
-            <button
-              v-for="chip in selectedChips"
-              :key="`${chip.key}-${chip.value}`"
-              type="button"
-              class="selected-chip"
-              @click="removeChip(chip)"
-            >
-              <span>{{ chip.group }} · {{ chip.label }}</span>
-              <span class="selected-x">×</span>
-            </button>
-          </div>
-          <span v-else class="selected-empty">暂无筛选条件，点击上方选项可多选</span>
-        </div>
-      </div>
-    </section>
 
     <!-- Mobile filter entry + bottom drawer -->
-    <section v-else class="mobile-filter-entry">
+    <section v-if="isMobile" class="mobile-filter-entry">
       <div class="mobile-filter-bar">
         <button type="button" class="filter-toggle" :class="{ active: selectedFilterCount > 0 }" @click="openFilterDrawer">
           <span>筛选</span>
@@ -615,8 +665,61 @@ onUnmounted(() => {
       </a-drawer>
     </section>
 
-    <a-spin :loading="loading" class="list-spin">
-      <a-empty v-if="!loading && tasks.length === 0" description="没有匹配的任务，请调整筛选条件" />
+    <div class="plaza-main">
+      <section v-if="!isMobile" class="browse-filters" aria-label="筛选任务">
+        <div class="browse-filter-row">
+          <span class="browse-filter-label">筛选</span>
+          <a-input
+            v-model="filters.keyword"
+            allow-clear
+            size="small"
+            class="browse-search"
+            aria-label="搜索任务"
+            placeholder="搜索任务标题或发布方"
+          />
+          <a-select
+            v-for="section in filterSections"
+            :key="`${activeModule}-${section.key}`"
+            v-model="filters[section.key]"
+            class="browse-select"
+            size="small"
+            style="width: 148px"
+            :data-filter-label="section.label"
+            :trigger-props="filterSelectTriggerProps"
+            :aria-label="section.label"
+            :placeholder="section.label"
+            :options="section.options"
+            :max-tag-count="0"
+            multiple
+            allow-clear
+          />
+          <a-button
+            v-if="selectedChips.length"
+            class="browse-reset"
+            type="text"
+            size="small"
+            @click="resetFilters"
+          >
+            清空
+          </a-button>
+        </div>
+        <div v-if="selectedChips.length" class="selected-chips">
+          <button
+            v-for="chip in selectedChips"
+            :key="`${chip.key}-${chip.value}`"
+            type="button"
+            class="selected-chip"
+            :aria-label="`移除筛选：${chip.label}`"
+            @click="removeChip(chip)"
+          >
+            {{ chip.label }} <span aria-hidden="true">×</span>
+          </button>
+        </div>
+      </section>
+
+      <a-spin :loading="loading" class="list-spin">
+      <a-empty v-if="!loading && tasks.length === 0"
+        :description="loadError ? '任务加载失败' : '没有匹配的任务，请调整筛选条件'" />
       <div v-else-if="tasks.length && isMobile" class="job-cards">
         <article
           v-for="task in tasks"
@@ -648,63 +751,53 @@ onUnmounted(() => {
           </div>
         </article>
       </div>
-      <div v-else-if="tasks.length" class="table-wrap">
-        <table class="project-table">
-          <thead>
-            <tr>
-              <th class="col-code">项目编号</th>
-              <th class="col-title">项目名称</th>
-              <th>发布方</th>
-              <th v-if="isIntern">开发周期</th>
-              <th v-else-if="isTa">学期</th>
-              <th v-else-if="isRa">截止</th>
-              <th v-else-if="isTeam">岗位</th>
-              <th v-if="isTa">每周投入</th>
-              <th v-else-if="isRa">方向</th>
-              <th v-else-if="isTeam">周期</th>
-              <th>名额</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="task in tasks"
-              :key="task.id"
-              class="project-row"
-              @click="openTask(task)"
-            >
-              <td class="col-code mono">{{ taskCode(task) }}</td>
-              <td class="col-title">
-                <div class="title-cell">
-                  <span class="title-text">{{ task.title }}</span>
-                  <span v-if="!isTa" class="title-meta">
-                    <template v-if="isIntern">{{ task.techField }} · {{ task.programmingLanguages }}</template>
-                    <template v-else-if="isTeam">
-                      {{ (task.positions || []).map((item) => `${item.title} ${item.filled}/${item.quota}`).join(' · ') || task.techField }}
-                    </template>
-                    <template v-else>{{ task.techField }}</template>
-                  </span>
-                </div>
-              </td>
-              <td>
-                <button type="button" class="publisher-cell" @click="openPublisherChat(task, $event)">
-                  {{ task.publisherName }}
-                </button>
-              </td>
-              <td v-if="isIntern">{{ durationLabel(task.durationWeeks) }}</td>
-              <td v-else-if="isTa">{{ scheduleLabel(task) }}</td>
-              <td v-else-if="isRa">
-                {{ task.bidDeadline ? task.bidDeadline.replace('T', ' ').slice(0, 16) : '长期' }}
-              </td>
-              <td v-else-if="isTeam">
-                {{ (task.positions || []).map((item) => item.title).join(' / ') || task.techField }}
-              </td>
-              <td v-if="isTa">{{ task.estimatedHours }} 小时/周</td>
-              <td v-else-if="isRa">{{ task.techField }}</td>
-              <td v-else-if="isTeam">{{ durationLabel(task.durationWeeks) }}</td>
-              <td>{{ seatLabel(task) }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div
+        v-else-if="selectedTask"
+        class="desktop-split browse-results"
+      >
+        <nav
+          ref="desktopListRef"
+          class="desktop-list"
+          aria-label="搜索结果"
+        >
+          <button v-for="task in tasks" :key="task.id" type="button" class="desktop-list-item"
+            :aria-pressed="selectedTask.id === task.id" @click="selectedTaskId = task.id">
+            <strong>{{ task.title }}</strong>
+            <span class="result-tags">
+              <span v-if="task.techField">{{ task.techField }}</span>
+              <span>名额 {{ seatLabel(task) }}</span>
+            </span>
+            <span class="result-publisher">{{ task.publisherName }}</span>
+          </button>
+          <div
+            v-if="!isMobile && (tasks.length || hasMore)"
+            ref="loadMoreSentinel"
+            class="load-more-sentinel"
+            aria-hidden="true"
+          />
+          <div v-if="!isMobile && loadingMore" class="load-more-status in-list">加载更多…</div>
+          <div v-else-if="!isMobile && tasks.length && !hasMore" class="load-more-status in-list muted">已经到底了</div>
+        </nav>
+        <div :key="selectedTask.id" class="browse-detail-wrap">
+          <section
+            ref="desktopDetailRef"
+            class="desktop-surface browse-detail"
+            aria-label="任务详情"
+            tabindex="0"
+            @scroll.passive="onDetailScroll"
+          >
+            <TaskDetailView :task-id="selectedTask.id" embedded />
+          </section>
+          <button
+            v-if="detailAwayFromTop"
+            type="button"
+            class="detail-back-top"
+            aria-label="回到详情顶部"
+            @click="scrollDetailToTop"
+          >
+            回到顶部
+          </button>
+        </div>
       </div>
       <div
         v-if="isMobile && (tasks.length || hasMore)"
@@ -717,16 +810,8 @@ onUnmounted(() => {
       <div v-else-if="loadError && !tasks.length" class="load-more-status">
         <a-button type="text" @click="loadModuleList">重新加载</a-button>
       </div>
-      <div v-if="showPcPager" class="pager">
-        <a-pagination
-          :total="totalCount"
-          :current="page + 1"
-          :page-size="PAGE_SIZE"
-          show-total
-          @change="onPcPageChange"
-        />
-      </div>
-    </a-spin>
+      </a-spin>
+    </div>
   </section>
 </template>
 
@@ -784,272 +869,11 @@ onUnmounted(() => {
   color: var(--ink);
 }
 .module-tab.active .module-name { color: #1d4ed8; }
-.module-blurb {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  margin-top: 6px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--muted);
-}
-.module-tab.active .module-blurb { color: #4b5563; }
-.module-hint {
-  margin: 0 0 14px;
-  color: var(--muted);
-  font-size: 13px;
-}
-.hero {
-  --hero-ink: #111827;
-  --hero-muted: #6b7280;
-  --hero-line: #eef2f7;
-  --hero-blue: #2563eb;
-  --hero-blue-deep: #1d4ed8;
-  position: relative;
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  align-items: center;
-  overflow: hidden;
-  margin-bottom: 14px;
-  padding: 28px 32px;
-  border: 1px solid var(--hero-line);
-  border-radius: 16px;
-  background:
-    radial-gradient(ellipse at 88% 28%, rgba(37, 99, 235, 0.14), transparent 52%),
-    radial-gradient(ellipse at 8% 92%, rgba(79, 70, 229, 0.08), transparent 46%),
-    linear-gradient(135deg, #ffffff 0%, #f8fbff 48%, #eff6ff 100%);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
-  animation: hero-in .55s ease-out both;
-}
-.hero-glow {
-  position: absolute;
-  width: 330px;
-  height: 330px;
-  right: -130px;
-  top: -180px;
-  border: 50px solid rgba(255, 255, 255, 0.55);
-  border-radius: 50%;
-  pointer-events: none;
-}
-.hero-grid {
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(rgba(37, 99, 235, 0.12) 1px, transparent 1px);
-  background-size: 19px 19px;
-  mask-image: linear-gradient(90deg, transparent 35%, black);
-  pointer-events: none;
-}
-.hero-inner { position: relative; z-index: 1; }
-.hero-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #64748b;
-  font-size: 10px;
-  letter-spacing: 1.8px;
-  margin-bottom: 18px;
-}
-.hero-eyebrow span {
-  width: 6px;
-  height: 6px;
-  background: var(--hero-blue);
-  border-radius: 50%;
-}
-.hero-title {
-  font-family: "Sora", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
-  color: var(--hero-ink);
-  font-size: clamp(27px, 3.2vw, 40px);
-  line-height: 1.45;
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  margin: 0;
-  animation: hero-rise .55s ease-out both;
-}
-.hero-title > span { color: var(--hero-blue-deep); }
-.hero-desc {
-  max-width: 34em;
-  margin-top: 15px;
-  color: var(--hero-muted);
-  font-size: 13px;
-  line-height: 1.9;
-}
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 23px;
-}
-.hero-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 18px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  transition: background .2s, box-shadow .2s, border-color .2s, color .2s;
-}
-.hero-cta.primary {
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22);
-}
-.hero-cta.primary:hover {
-  filter: brightness(1.04);
-  color: #fff;
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
-}
-.hero-cta.secondary {
-  border: 1px solid #bfdbfe;
-  color: var(--hero-blue-deep);
-  background: rgba(255, 255, 255, 0.85);
-}
-.hero-cta.secondary:hover {
-  background: #fff;
-  border-color: #93c5fd;
-  color: #1e40af;
-}
-.hero-cta:focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.35);
-  outline-offset: 3px;
-}
-.hero-art {
-  position: relative;
-  height: 265px;
-  margin-left: 24px;
-}
-.art-orbit {
-  position: absolute;
-  width: 245px;
-  height: 245px;
-  border: 1px solid rgba(37, 99, 235, 0.18);
-  border-radius: 50%;
-  left: 50%;
-  top: 47%;
-  transform: translate(-50%, -50%);
-}
-.art-orbit::after {
-  content: '';
-  position: absolute;
-  inset: 26px;
-  border: 1px dashed rgba(79, 70, 229, 0.22);
-  border-radius: 50%;
-}
-.art-center {
-  position: absolute;
-  top: 99px;
-  left: 50%;
-  transform: translateX(-50%) rotate(-8deg);
-  width: 130px;
-  height: 102px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(145deg, #2563eb, #4f46e5);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  border-radius: 16px;
-  box-shadow: 0 14px 24px rgba(37, 99, 235, 0.22);
-}
-.art-center > span {
-  font: 700 28px "Sora", sans-serif;
-  letter-spacing: 2px;
-}
-.art-center small {
-  font: 7px ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 1px;
-  margin-top: 10px;
-  color: #dbeafe;
-}
-.art-card {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 17px;
-  border: 1px solid #eef2f7;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-}
-.art-card strong {
-  display: block;
-  color: #111827;
-  font-size: 13px;
-  font-weight: 650;
-}
-.art-card small {
-  display: block;
-  font: 7px ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #94a3b8;
-  margin-top: 5px;
-  letter-spacing: .6px;
-}
-.art-symbol {
-  font: 700 18px "Sora", sans-serif;
-  color: var(--hero-blue);
-}
-.art-teach { top: 8px; left: 0; transform: rotate(-7deg); }
-.art-code { top: 18px; right: -4px; transform: rotate(6deg); }
-.art-research { left: -8px; bottom: 28px; transform: rotate(-4deg); }
-.art-project { right: -8px; bottom: 22px; transform: rotate(5deg); }
-.art-caption {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #64748b;
-  font-size: 10px;
-  letter-spacing: 3px;
-  white-space: nowrap;
-}
-@media (max-width: 1000px) { .hero { padding: 30px; grid-template-columns: 1.2fr .8fr; }.hero-art { transform: scale(.85); transform-origin: center; margin-left: 0; } }
-@media (max-width: 760px) { .hero { grid-template-columns: 1fr; }.hero-art { display: none; } }
-@keyframes hero-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes hero-rise {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 .page-head-mobile {
   margin: 8px 0 10px;
   align-items: center;
 }
 
-.filter-panel {
-  margin-bottom: 22px;
-  padding: 22px 24px 20px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-.filter-body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.filter-row {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  gap: 16px 20px;
-  align-items: start;
-}
-.filter-label {
-  padding-top: 8px;
-  color: #6b7280;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.4;
-  white-space: nowrap;
-}
 .chip-group {
   display: flex;
   flex-wrap: nowrap;
@@ -1080,29 +904,6 @@ onUnmounted(() => {
   border-color: #2563eb;
   color: #fff;
 }
-.tool-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-.selected-bar {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-top: 4px;
-  padding-top: 16px;
-  border-top: 1px dashed var(--line);
-}
-.filter-row.tools {
-  padding-top: 4px;
-}
-.selected-label {
-  flex: 0 0 auto;
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--muted);
-}
 .selected-chips {
   display: flex;
   flex-wrap: wrap;
@@ -1128,11 +929,6 @@ onUnmounted(() => {
   line-height: 1;
   color: #5b7c90;
 }
-.selected-empty {
-  color: #94a3b8;
-  font-size: 13px;
-  padding-top: 4px;
-}
 .list-spin {
   width: 100%;
   min-height: 120px;
@@ -1150,124 +946,363 @@ onUnmounted(() => {
 .load-more-status.muted {
   color: #94a3b8;
 }
-.pager {
-  display: flex;
-  justify-content: flex-end;
-  padding: 16px 0 4px;
+.load-more-status.in-list {
+  margin-top: auto;
+  padding: 18px 12px 20px;
+  border-top: 1px solid #edf0f4;
+  background: linear-gradient(180deg, #fafbfc 0%, #f3f6fa 100%);
+  font-size: 12px;
+  letter-spacing: 0.02em;
 }
 
-.table-wrap {
-  overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+.plaza:not(.plaza-mobile) {
+  --plaza-filter-sticky: 52px;
+  --plaza-detail-top: calc(var(--desktop-header-height, 58px) + 16px);
+  --plaza-detail-height: calc(100dvh - var(--desktop-header-height, 58px) - 32px);
+  max-width: 1140px;
+  margin-inline: auto;
+}
+.plaza:not(.plaza-mobile).is-compact {
+  --plaza-detail-top: var(--plaza-filter-sticky);
+  --plaza-detail-height: calc(100dvh - var(--plaza-filter-sticky) - 16px);
+}
+.browse-board {
+  margin-bottom: 14px;
+  border: 1px solid var(--desktop-line, var(--line));
+  border-radius: 14px;
   background: #fff;
+  overflow: visible;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+.plaza-main {
+  position: relative;
+}
+.plaza:not(.plaza-mobile) .browse-board {
+  margin-bottom: 0;
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+}
+.plaza:not(.plaza-mobile) .browse-filters {
+  margin: 0 0 14px;
+  padding: 10px 22px 14px;
+  border: 1px solid var(--desktop-line, var(--line));
+  border-top: 1px solid #f1f5f9;
+  border-radius: 0 0 14px 14px;
+  background: #fbfcfe;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+.plaza.is-compact .browse-board {
+  display: none;
+}
+.plaza.is-compact .browse-filters {
+  position: sticky;
+  top: 0;
+  z-index: 31;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  border-top: 1px solid var(--desktop-line, var(--line));
+  background: #fbfcfe;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
-.project-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 0;
-  table-layout: fixed;
-  font-size: 14px;
+.plaza:not(.plaza-mobile) .list-spin {
+  position: relative;
+  z-index: 1;
+}
+.browse-head {
+  scroll-margin-top: 80px;
+  padding: 18px 22px;
+  background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
+  border-bottom: 1px solid var(--desktop-line, var(--line));
+}
+.browse-head > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 14px; min-width: 0; }
+.browse-head h1 {
+  font-family: "Sora", "Noto Sans SC", sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   color: var(--ink);
 }
-.project-table th,
-.project-table td {
-  padding: 12px 12px;
-  border-bottom: 1px solid #eef1f5;
-  text-align: left;
-  vertical-align: middle;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.project-table thead th {
-  background: #f6f8fb;
-  color: #5b6b7c;
-  font-weight: 600;
+.browse-head a {
   font-size: 13px;
-  white-space: nowrap;
+  font-weight: 500;
+  color: var(--accent);
 }
-.project-row {
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.project-row:hover {
-  background: #f8fafc;
-}
-.project-row:last-child td {
-  border-bottom: none;
-}
-.col-code {
-  width: 96px;
-  white-space: nowrap;
-}
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: #64748b;
-  font-size: 13px;
-}
-.col-title {
-  width: 34%;
-}
-.title-cell {
+.browse-head a:hover { text-decoration: underline; }
+.plaza:not(.plaza-mobile) .module-tabs {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0;
+  padding: 0 10px;
+  background: #fff;
+  border-bottom: 1px solid var(--desktop-line, var(--line));
+}
+.plaza:not(.plaza-mobile) .module-tab {
+  padding: 13px 14px 11px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.plaza:not(.plaza-mobile) .module-tab:hover {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+}
+.plaza:not(.plaza-mobile) .module-tab:hover .module-name { color: #1d4ed8; }
+.plaza:not(.plaza-mobile) .module-tab.active {
+  border-bottom-color: var(--accent);
+  background: transparent;
+  box-shadow: none;
+}
+.plaza:not(.plaza-mobile) .module-tab .module-name {
+  font-size: 14px;
+  font-weight: 650;
+}
+.channel-note {
+  margin: 0;
+  padding: 10px 22px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.browse-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
-.title-text {
-  color: #1d4ed8;
+.browse-filter-label {
+  flex: none;
+  color: #64748b;
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.browse-search {
+  flex: none;
+  width: 200px;
+  max-width: 200px;
+}
+.browse-search :deep(.arco-input-wrapper),
+.browse-filters :deep(.browse-search.arco-input-wrapper) {
+  width: 200px;
+  background: #fff;
+  border-color: #dbe3ee;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.browse-filters :deep(.browse-search.arco-input-wrapper:hover),
+.browse-filters :deep(.browse-search.arco-input-wrapper.arco-input-focus) {
+  border-color: #93c5fd;
+}
+/* class 落在 arco-select-view 根节点上，不要 flex 拉伸 */
+.browse-filters :deep(.browse-select),
+.browse-filters :deep(.browse-select.arco-select-view) {
+  flex: none !important;
+  flex-grow: 0 !important;
+  width: 148px !important;
+  min-width: 148px !important;
+  max-width: 148px !important;
+  background: #fff;
+  border-color: #dbe3ee;
+  border-radius: 8px;
+}
+.browse-filters :deep(.browse-select .arco-select-view-inner) {
+  width: auto !important;
+  max-width: 100%;
+}
+/* 已选值由下方 chip 展示，触发器内不显示 tag / +N */
+.browse-filters :deep(.browse-select .arco-select-view-tag),
+.browse-filters :deep(.browse-select .arco-tag) {
+  display: none !important;
+}
+.browse-filters :deep(.browse-select.arco-select-view-has-tag)::before {
+  content: attr(data-filter-label);
+  color: var(--color-text-1, #1d2129);
+  font-size: 13px;
+  line-height: 22px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.project-row:hover .title-text {
-  text-decoration: underline;
+.browse-filters :deep(.browse-select.arco-select-view-has-tag .arco-select-view-input),
+.browse-filters :deep(.browse-select.arco-select-view-has-tag .arco-select-view-mirror) {
+  position: absolute;
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  pointer-events: none;
 }
-.title-meta {
-  color: var(--muted);
+.browse-reset {
+  flex: none;
+  margin-inline-start: auto;
+  color: #64748b;
+  padding: 0 4px;
+}
+.browse-filters .selected-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.browse-filters .selected-chip {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.browse-results {
+  grid-template-columns: minmax(240px, 34%) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  height: auto;
+  min-height: 0;
+}
+.browse-results .desktop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  align-items: stretch;
+  align-self: start;
+  height: auto;
+  min-height: var(--plaza-detail-height);
+  max-height: none !important;
+  padding: 0;
+  border: 1px solid var(--desktop-line, var(--line));
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, #ffffff 0%, #ffffff 72%, #f5f7fb 100%);
+  overflow: visible !important;
+}
+.browse-results .desktop-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid #edf0f4;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: #fff;
+  color: var(--ink, #111827);
+  text-align: left;
+  font: inherit;
+  line-height: 1.45;
+  white-space: normal;
+  overflow: visible;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.browse-results .desktop-list-item:last-child { border-bottom: 0; }
+.browse-results .desktop-list-item:hover {
+  background: #f8fafc;
+}
+.browse-results .desktop-list-item[aria-pressed="true"] {
+  border-left-color: var(--accent);
+  background: #eff6ff;
+}
+.browse-results .desktop-list-item[aria-pressed="true"] strong { color: #1d4ed8; }
+.browse-results .desktop-list-item strong {
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 1.45em;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browse-results .result-tags {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+.result-tags > span {
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #64748b;
   font-size: 12px;
   line-height: 1.4;
 }
-.publisher-cell {
-  border: 0;
+.browse-results .result-publisher {
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 1.4em;
+  margin: 0;
   padding: 0;
   background: transparent;
-  color: #2563eb;
-  cursor: pointer;
-  font: inherit;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.publisher-cell:hover {
-  text-decoration: underline;
+.browse-detail-wrap {
+  position: sticky;
+  top: var(--plaza-detail-top);
+  z-index: 5;
+  align-self: start;
+  min-width: 0;
+  height: var(--plaza-detail-height);
+  max-height: var(--plaza-detail-height);
 }
-.stipend-cell {
-  max-width: 180px;
-  color: var(--muted);
-  font-size: 13px;
-  overflow-wrap: anywhere;
+.browse-detail {
+  height: 100%;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 12px;
+  border: 1px solid var(--desktop-line, var(--line));
+  border-radius: 12px;
+  background: #fff;
 }
-.apply-link {
-  color: #94a3b8;
-}
-.apply-link.linked {
-  color: #2563eb;
+.detail-back-top {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+  color: #334155;
+  font-size: 12px;
   font-weight: 600;
+  cursor: pointer;
 }
-
+.detail-back-top:hover {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.browse-results .desktop-list {
+  overscroll-behavior: contain;
+}
 @media (max-width: 900px) {
-  .module-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filter-row { grid-template-columns: 1fr; gap: 8px; }
-  .filter-label { padding-top: 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hero,
-  .hero-title,
-  .hero-desc,
-  .hero-actions,
-  .hero-glow {
-    animation: none !important;
-  }
+  .browse-results { grid-template-columns: minmax(200px, 34%) minmax(0, 1fr); }
+  .browse-head { grid-template-columns: 1fr; }
 }
 .module-tabs.compact {
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1451,4 +1486,21 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .seat { font-size: 12px; color: #9ca3af; }
+</style>
+
+<style>
+/* 下拉挂到 body，需非 scoped，保证长选项文案完整显示 */
+.plaza-filter-dropdown .arco-select-dropdown,
+.plaza-filter-dropdown.arco-select-dropdown {
+  min-width: 280px !important;
+  width: max-content !important;
+  max-width: 420px;
+}
+.plaza-filter-dropdown .arco-select-option {
+  white-space: nowrap;
+}
+.plaza-filter-dropdown .arco-checkbox-label {
+  white-space: nowrap;
+  overflow: visible;
+}
 </style>

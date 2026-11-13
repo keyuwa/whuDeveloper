@@ -3,9 +3,11 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
 import { api } from '../../api'
+import { useIsMobile } from '../../composables/useDevice'
 import { auth } from '../../auth'
 import { useProjectWorkspace } from '../../composables/useProjectWorkspace'
 
+const isMobile = useIsMobile()
 const route = useRoute()
 const router = useRouter()
 const { project, loading, basePath, isStudent, isPublisher } = useProjectWorkspace()
@@ -74,7 +76,7 @@ function leaveProject() {
 </script>
 
 <template>
-  <section class="project-shell stack">
+  <section class="project-shell stack" :class="{ 'project-shell-desktop': !isMobile }">
     <a-spin :loading="loading && !project" style="width: 100%">
       <template v-if="project">
         <router-link :to="backTo" class="back-link">← {{ backLabel }}</router-link>
@@ -90,16 +92,26 @@ function leaveProject() {
           </div>
           <div class="shell-actions">
             <a-tag color="arcoblue" size="large">{{ statusLabel[project.status] || project.status }}</a-tag>
+            <router-link
+              v-if="isStudent || isPublisher"
+              :to="{ path: '/messages', query: { taskId: String(project.taskId), studentId: String(project.studentId) } }"
+            >{{ isStudent ? '联系发布方' : '联系学生' }}</router-link>
             <a-button v-if="canLeave" status="danger" :loading="leaving" @click="leaveProject">取消协作</a-button>
           </div>
         </header>
 
-        <a-tabs class="workspace-tabs" :active-key="activeTab" type="line" size="large" @change="onTabChange">
+        <a-tabs v-if="isMobile" class="workspace-tabs" :active-key="activeTab" type="line" size="large" @change="onTabChange">
           <a-tab-pane v-for="item in tabs" :key="item.key" :title="item.label" />
         </a-tabs>
 
-        <div class="shell-body">
-          <router-view />
+        <div :class="{ 'desktop-split desktop-project-split': !isMobile }">
+          <nav v-if="!isMobile" class="desktop-list" aria-label="项目工作区">
+            <router-link v-for="item in tabs" :key="item.key" :to="item.path" class="desktop-list-item"
+              :aria-current="activeTab === item.key ? 'page' : undefined">{{ item.label }}</router-link>
+          </nav>
+          <div class="shell-body desktop-detail">
+            <router-view />
+          </div>
         </div>
       </template>
       <div v-else-if="!loading" class="empty-state">
@@ -165,5 +177,11 @@ function leaveProject() {
 .shell-kicker { margin-bottom: 8px; font-size: 10px; }
 .shell-hero :deep(h3) { font-size: 22px; }
 .shell-meta { font-size: 12px; }
+.project-shell-desktop .shell-hero {
+  background: var(--desktop-heading-bg);
+  border: 1px solid var(--desktop-line);
+  border-radius: var(--radius-lg);
+  padding: 18px 22px;
+}
 @media (max-width: 700px) { .shell-hero { flex-direction: row; align-items: flex-start; }.shell-hero-main { min-width: 0; } }
 </style>

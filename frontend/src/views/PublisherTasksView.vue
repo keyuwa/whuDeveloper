@@ -11,6 +11,10 @@ const route = useRoute()
 const router = useRouter()
 const isMobile = useIsMobile()
 const tasks = ref<Task[]>([])
+const selectedTaskId = ref<number | null>(null)
+const activeTask = computed(() => tasks.value.find(task => task.id === selectedTaskId.value) ?? tasks.value[0])
+const displayedTasks = computed(() => isMobile.value ? tasks.value : activeTask.value ? [activeTask.value] : [])
+
 const projects = ref<Project[]>([])
 const loading = ref(false)
 const loadingMore = ref(false)
@@ -343,7 +347,17 @@ function openInbox(taskId?: number) {
     <a-spin :loading="loading" style="width: 100%">
       <a-empty v-if="!loading && tasks.length === 0" :description="emptyDescription" />
       <div v-else class="stack">
-        <a-card v-for="task in tasks" :key="task.id" class="task-card">
+        <div :class="{ 'desktop-split': !isMobile }">
+        <nav v-if="!isMobile && tasks.length" class="desktop-list" aria-label="已发布任务">
+          <button v-for="task in tasks" :key="task.id" type="button" class="desktop-list-item"
+            :aria-pressed="activeTask?.id === task.id" @click="selectedTaskId = task.id">
+            <strong>{{ task.title }}</strong>
+            <span>{{ statusLabel[task.status] || task.status }} · 已入项 {{ task.filled }}/{{ task.quota }}</span>
+            <span v-if="task.pendingApplications">待审 {{ task.pendingApplications }}</span>
+          </button>
+        </nav>
+        <div class="stack desktop-detail">
+        <a-card v-for="task in displayedTasks" :key="task.id" class="task-card">
           <div class="task-body">
             <a-space wrap style="margin-bottom: 8px">
               <a-tag size="small">{{ task.publicCode }}</a-tag>
@@ -450,6 +464,8 @@ function openInbox(taskId?: number) {
             </div>
           </div>
         </a-card>
+        </div>
+        </div>
         <div
           v-if="isMobile && (tasks.length || hasMore)"
           ref="loadMoreSentinel"

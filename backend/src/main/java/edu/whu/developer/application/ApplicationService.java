@@ -200,6 +200,9 @@ public class ApplicationService {
         if ("CHALLENGE".equals(application.getTask().getPostingMode()) && "ACCEPT".equals(request.decision())) {
             return award(id, new AwardRequest(request.note()));
         }
+        if ("REJECT".equals(request.decision()) && blank(request.note()) == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写不通过的具体原因");
+        }
         application.setReviewNote(blank(request.note()));
         if ("ACCEPT".equals(request.decision())) {
             application.setStatus("ACCEPTED");

@@ -103,7 +103,7 @@ public class ProjectService {
     @Transactional
     public ProjectResponse leave(Long id) {
         AuthUser student = AuthSupport.requireRole(Role.STUDENT);
-        Project project = visible(id);
+        Project project = visibleForUpdate(id);
         if (!project.getStudent().getId().equals(student.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能取消自己的项目");
         }
@@ -167,7 +167,7 @@ public class ProjectService {
     @Transactional
     public ProjectResponse submitReport(Long projectId, ReportRequest request) {
         AuthUser student = AuthSupport.requireRole(Role.STUDENT);
-        Project project = visible(projectId);
+        Project project = visibleForUpdate(projectId);
         if (!project.getStudent().getId().equals(student.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有本项目学生可以提交周报");
         }
@@ -229,9 +229,12 @@ public class ProjectService {
     @Transactional
     public ProjectResponse submitCompletion(Long projectId, CompletionRequest request) {
         AuthUser student = AuthSupport.requireRole(Role.STUDENT);
-        Project project = visible(projectId);
+        Project project = visibleForUpdate(projectId);
         if (!project.getStudent().getId().equals(student.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有本项目学生可以提交结项");
+        }
+        if (!"ACTIVE".equals(project.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "仅进行中的项目可提交结项材料");
         }
         String reportMd = blank(request.reportMd());
         String reportFileUrl = blank(request.reportFileUrl());
@@ -265,13 +268,13 @@ public class ProjectService {
     @Transactional
     public ProjectResponse reviewCompletion(Long projectId, ReviewRequest request) {
         AuthUser publisher = AuthSupport.requireRole(Role.PUBLISHER);
-        Project project = visible(projectId);
+        Project project = visibleForUpdate(projectId);
         if (!project.getPublisher().getId().equals(publisher.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能审核自己的项目");
         }
         Completion completion = completions.findByProjectId(projectId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "还没有结项材料"));
-        if (!"SUBMITTED".equals(completion.getStatus())) {
+        if (!"COMPLETING".equals(project.getStatus()) || !"SUBMITTED".equals(completion.getStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "结项材料不在待审状态");
         }
         completion.setReviewNote(blank(request.note()));
@@ -305,8 +308,15 @@ public class ProjectService {
     }
 
     private Project visible(Long id) {
+        return checkVisibility(projects.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "项目不存在")));
+    }
+
+    private Project visibleForUpdate(Long id) {
+        return checkVisibility(projects.findForUpdate(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "项目不存在")));
+    }
+
+    private Project checkVisibility(Project project) {
         AuthUser user = AuthSupport.current();
-        Project project = projects.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "项目不存在"));
         boolean allowed = user.getRole() == Role.ADMIN
                 || project.getStudent().getId().equals(user.getId())
                 || project.getPublisher().getId().equals(user.getId());
