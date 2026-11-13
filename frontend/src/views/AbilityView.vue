@@ -43,7 +43,7 @@ type Partner = {
 
 const partnerGroups: { title: string; items: Partner[] }[] = [
   {
-    title: '主办方',
+    title: '组织方',
     items: [
       { name: 'Evolving Systems Lab @ Wuhan University', href: 'https://whues.org/', color: '#2563eb', mark: 'ES' },
     ],
