@@ -440,7 +440,7 @@ async function startChat() {
                 <a-tag v-for="tag in techFieldTags" :key="tag" size="small" style="margin: 0 6px 6px 0">{{ tag }}</a-tag>
               </div>
             </div>
-            <div v-if="task.roleType !== 'TA' && !isTeam" class="meta-row">
+            <div v-if="task.roleType === 'INTERN'" class="meta-row">
               <span class="meta-label">编程语言</span>
               <div>
                 <a-tag v-for="tag in programmingTags" :key="tag" color="green" size="small" style="margin: 0 6px 6px 0">{{ tag }}</a-tag>

@@ -123,7 +123,7 @@ watch(
                   <a-tag v-for="tag in techFieldTags" :key="tag" size="small">{{ tag }}</a-tag>
                 </div>
               </div>
-              <div v-if="task.roleType !== 'TA'" class="meta-row">
+              <div v-if="task.roleType === 'INTERN'" class="meta-row">
                 <span class="meta-label">编程语言</span>
                 <div class="tag-wrap">
                   <a-tag v-for="tag in programmingTags" :key="tag" color="arcoblue" size="small">{{ tag }}</a-tag>
