@@ -497,12 +497,14 @@ function openInbox(taskId?: number) {
 .desktop-list-item strong { font-size: 15px; font-weight: 700; line-height: 1.5; }
 .management-description { margin: 6px 0 0; color: var(--text-body); font-size: 13px; line-height: 1.5; }
 .task-management-panel .management-filters {
-  --filter-outer-inset: 20px;
   margin: 0;
-  padding: 10px 20px;
+  padding: 0 0 12px;
   border: 0;
   border-top: 1px solid var(--surface-line);
   border-radius: 0 0 var(--surface-radius) var(--surface-radius);
+}
+.task-management-panel .management-filters :deep(.filter-controls) {
+  padding: 12px 20px 0;
 }
 @media (max-width: 767px) {
   .management-heading { justify-content: flex-end; padding: 12px; }
