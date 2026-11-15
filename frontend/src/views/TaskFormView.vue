@@ -364,7 +364,7 @@ async function save(publish: boolean) {
 </script>
 
 <template>
-  <a-card :title="route.params.id ? '编辑项目' : (isRa ? '发布科研 RA' : '发布项目')">
+  <a-card :title="route.params.id ? (isTeam ? '编辑难题' : '编辑项目') : (isRa ? '发布科研 RA' : isTeam ? '发布难题' : '发布项目')">
     <a-alert
       v-if="isRa"
       type="info"
@@ -377,7 +377,7 @@ async function save(publish: boolean) {
       v-if="isTeam"
       type="info"
       style="margin-bottom: 16px"
-      title="项目 · 可挂多个岗位"
+      title="难题 · 可挂多个岗位"
     >
       不适合归入助教、开发、科研时用这里。可一次发布多个岗位（如研发、运营），学生按岗位报名，各岗位名额独立。
     </a-alert>

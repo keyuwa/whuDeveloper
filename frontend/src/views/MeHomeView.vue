@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
+import StudentHomeBoard from '../components/StudentHomeBoard.vue'
 import { api } from '../api'
 import { auth, logout } from '../auth'
 
@@ -51,6 +52,8 @@ function onLogout() {
       </template>
     </header>
 
+    <StudentHomeBoard v-if="user?.role === 'STUDENT'" />
+
     <div class="me-list">
       <button type="button" class="me-row" @click="router.push('/me/resume')">
         <span>我的简历</span>
@@ -74,7 +77,7 @@ function onLogout() {
 </template>
 
 <style scoped>
-.me-home { max-width: 560px; margin: 0 auto; }
+.me-home { max-width: 880px; margin: 0 auto; }
 .me-hero {
   display: flex;
   align-items: center;

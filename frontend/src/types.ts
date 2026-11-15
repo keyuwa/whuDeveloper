@@ -244,14 +244,14 @@ export const TASK_ROLE_TYPES = [
   { value: 'TA', label: '助教 TA', shortLabel: '助教' },
   { value: 'INTERN', label: '开发 Intern', shortLabel: '开发' },
   { value: 'RA', label: '科研 RA', shortLabel: '科研' },
-  { value: 'TEAM', label: '项目', shortLabel: '项目' },
+  { value: 'TEAM', label: '难题', shortLabel: '难题' },
 ] as const
 
 export const TASK_ROLE_LABEL: Record<string, string> = {
   TA: '助教 TA',
   INTERN: '开发 Intern',
   RA: '科研 RA',
-  TEAM: '项目',
+  TEAM: '难题',
 }
 
 export const TEAM_POSITIONS = ['研发', '运营', '数据采集', '数据标注', '质检', '其它'] as const

@@ -143,6 +143,10 @@ function deleteThread(item: ThreadSummary, event: Event) {
   })
 }
 
+function openTask(item: ThreadSummary) {
+  void router.push(`/tasks/${item.taskId}`)
+}
+
 function clearActiveChat() {
   activeTaskId.value = null
   activeStudentId.value = null
@@ -155,9 +159,15 @@ async function openFromQuery() {
   const studentRaw = route.query.studentId
   const taskId = typeof taskRaw === 'string' ? Number(taskRaw) : NaN
   if (!Number.isFinite(taskId)) {
+    const title = typeof route.query.taskTitle === 'string' ? route.query.taskTitle : ''
+    const hit = title ? threads.value.find((item) => item.taskTitle === title) : undefined
     activeTaskId.value = null
     activeStudentId.value = null
     messages.value = []
+    if (hit) {
+      await selectThread(hit)
+      return
+    }
     if (!isMobile.value && threads.value.length) {
       await selectThread(threads.value[0])
     }
@@ -297,13 +307,15 @@ watch(
           <div class="thread-list">
             <a-empty v-if="threads.length && !shownThreads.length" description="没有匹配的会话" />
             <a-empty v-if="!loading && threads.length === 0" description="还没有对话，去任务详情开始沟通" />
-            <button
+            <div
               v-for="item in shownThreads"
               :key="threadKey(item)"
-              type="button"
+              role="button"
+              tabindex="0"
               class="thread-item"
               :class="{ active: isActive(item) }"
               @click="selectThread(item)"
+              @keydown.enter.prevent="selectThread(item)"
             >
               <span class="thread-avatar" aria-hidden="true">{{ avatarLetter(peerOf(item)) }}</span>
               <span class="thread-body">
@@ -311,20 +323,21 @@ watch(
                   <strong>{{ peerOf(item) }}</strong>
                   <span class="thread-time">{{ formatThreadTime(item.createdAt) }}</span>
                 </span>
-                <span class="thread-task">{{ item.taskTitle }}</span>
+                <button v-if="!isMobile" type="button" class="thread-task" @click.stop="openTask(item)">
+                  {{ item.taskTitle }}
+                </button>
+                <span v-else class="thread-task">{{ item.taskTitle }}</span>
                 <span class="thread-preview">{{ item.lastBody }}</span>
               </span>
-              <span
+              <button
+                type="button"
                 class="thread-delete"
-                role="button"
-                tabindex="0"
                 title="删除会话"
                 @click="deleteThread(item, $event)"
-                @keydown.enter="deleteThread(item, $event)"
               >
                 删除
-              </span>
-            </button>
+              </button>
+            </div>
           </div>
         </aside>
 
@@ -536,10 +549,19 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
   font-size: 12px;
   color: #2563eb;
   font-weight: 500;
+  cursor: pointer;
+  text-align: left;
 }
+.thread-task:hover { text-decoration: underline; }
 .thread-preview {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -558,10 +580,12 @@ watch(
   padding: 0;
   cursor: pointer;
   opacity: 0;
+  pointer-events: none;
 }
 .thread-item:hover .thread-delete,
-.thread-item.active .thread-delete {
+.thread-item:focus-within .thread-delete {
   opacity: 1;
+  pointer-events: auto;
 }
 .thread-delete:hover {
   color: #dc2626;
@@ -757,6 +781,12 @@ watch(
 .messages-mobile .composer-input :deep(textarea) { min-height: 44px; font-size: 16px; }
 .messages-mobile .chat-composer { padding: 10px 12px; }
 .messages-mobile .composer-bar .arco-btn { min-height: 40px; }
+.messages-mobile .chat-task a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 4px 0;
+}
 .messages-mobile .chat-pane {
   height: max(280px, calc(100dvh - 88px - var(--bottom-inset, 0px)));
   min-height: 0;
@@ -765,8 +795,18 @@ watch(
   border-radius: 12px;
   overflow: hidden;
 }
+.messages-mobile .thread-item {
+  padding-right: 64px;
+}
 .messages-mobile .thread-delete {
+  top: 50%;
+  right: 8px;
+  bottom: auto;
+  transform: translateY(-50%);
+  min-width: 44px;
+  min-height: 44px;
   opacity: 1;
+  pointer-events: auto;
 }
 @media (max-width: 800px) {
   .chat-shell:not(.mobile-mode) {

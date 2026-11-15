@@ -8,6 +8,7 @@ import { auth } from '../auth'
 import { useIsMobile } from '../composables/useDevice'
 import { loadDicts, dictOptions, scheduleLabelMap } from '../composables/useDicts'
 import { readCachedSiteConfig, writeCachedSiteConfig } from '../siteConfigCache'
+import { majorScore } from '../majorMatch'
 import { TASK_ROLE_TYPES, type Task, type TaskPage } from '../types'
 
 defineOptions({ name: 'PlazaView' })
@@ -101,7 +102,7 @@ const DEFAULT_MODULE_BLURBS: Record<string, string> = {
   TA: '助教任务：课程支持、答疑与教学协作',
   INTERN: '开发任务：产品功能、工程实现与开源贡献',
   RA: '科研任务：以揭榜形式开放方向，学生提交方案竞标',
-  TEAM: '项目：运营、标注等协作需求，按岗位报名，一次可招多人',
+  TEAM: '难题：运营、标注等协作需求，按岗位报名，一次可招多人',
 }
 const moduleBlurbs = ref<Record<string, string>>({ ...DEFAULT_MODULE_BLURBS })
 const filters = reactive({
@@ -190,9 +191,13 @@ function matchesAnyRange(value: number, ranges: string[]) {
   return ranges.some((range) => inRange(value, range))
 }
 
+const studentMajor = computed(() =>
+  auth.user?.role === 'STUDENT' ? (auth.user.major || '').trim() : '',
+)
+
 const tasks = computed(() => {
   const keyword = filters.keyword.trim().toLowerCase()
-  return sourceTasks.value.filter((task) => {
+  const matched = sourceTasks.value.filter((task) => {
     if (isIntern.value) {
       if (filters.techFields.length && !filters.techFields.includes(task.techField)) return false
       if (filters.durations.length && !matchesAnyRange(task.durationWeeks, filters.durations)) return false
@@ -237,7 +242,14 @@ const tasks = computed(() => {
       .toLowerCase()
       .includes(keyword)
   })
+  const major = studentMajor.value
+  if (!major) return matched
+  return [...matched].sort((a, b) => majorScore(major, b) - majorScore(major, a))
 })
+
+function matchesMajor(task: Task) {
+  return Boolean(studentMajor.value) && majorScore(studentMajor.value, task) > 0
+}
 
 const selectedTaskId = ref<number | null>(null)
 const selectedTask = computed(() => tasks.value.find(task => task.id === selectedTaskId.value) ?? tasks.value[0])
@@ -557,7 +569,10 @@ onUnmounted(() => {
           <span class="module-name">{{ item.label }}</span>
         </button>
       </nav>
-      <p class="channel-note">{{ activeModuleMeta.blurb }}</p>
+      <p class="channel-note">
+        {{ activeModuleMeta.blurb }}
+        <span v-if="studentMajor">已按专业「{{ studentMajor }}」把更合适的任务排在前面。</span>
+      </p>
     </div>
 
     <section v-if="isMobile" id="opportunities" class="mobile-filter-entry" aria-label="搜索与筛选任务">
@@ -585,7 +600,10 @@ onUnmounted(() => {
         </button>
       </nav>
       <div class="mobile-filter-bar">
-        <p class="mobile-count" aria-live="polite">{{ loadError ? '任务加载失败' : `${resultCount} 个开放任务` }}</p>
+        <p class="mobile-count" aria-live="polite">
+          {{ loadError ? '任务加载失败' : `${resultCount} 个开放任务` }}
+          <span v-if="studentMajor"> · 已按「{{ studentMajor }}」排序</span>
+        </p>
         <button type="button" class="filter-toggle" :class="{ active: selectedFilterCount > 0 }"
           :aria-expanded="filterDrawerVisible" aria-haspopup="dialog" @click="openFilterDrawer">
           <icon-filter aria-hidden="true" />
@@ -708,6 +726,7 @@ onUnmounted(() => {
             <div class="job-card-top">
               <h3 class="job-title">{{ task.title }}</h3>
               <span class="seat">名额 {{ task.filled }}/{{ task.quota }}</span>
+              <span v-if="matchesMajor(task)" class="seat match">专业匹配</span>
             </div>
             <p class="job-meta">
               <template v-if="isIntern">
@@ -752,6 +771,7 @@ onUnmounted(() => {
             <span class="result-tags">
               <span v-if="task.techField">{{ task.techField }}</span>
               <span>名额 {{ seatLabel(task) }}</span>
+              <span v-if="matchesMajor(task)">专业匹配</span>
             </span>
             <span class="result-publisher">{{ task.publisherName }}</span>
           </button>

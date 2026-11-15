@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import StudentHomeBoard from '../components/StudentHomeBoard.vue'
 import { auth } from '../auth'
 import { readCachedSiteConfig } from '../siteConfigCache'
 
@@ -28,7 +29,7 @@ const tracks = [
   },
   {
     key: 'TEAM',
-    name: '项目协作',
+    name: '难题',
     blurb: '运营、标注等协作需求按岗位报名，一次可招多人，按节奏推进交付。',
   },
 ]
@@ -77,7 +78,7 @@ const partnerGroups: { title: string; items: Partner[] }[] = [
 const steps = [
   {
     title: '浏览任务',
-    text: '在任务广场按频道筛选：助教、开发、科研与项目，找到匹配方向。',
+    text: '在任务广场按频道筛选：助教、开发、科研与难题，找到匹配方向。',
   },
   {
     title: '申请与沟通',
@@ -101,7 +102,7 @@ function goPlaza() {
         <p class="brand">WHU Dev</p>
         <h1 id="home-hero-title">校园开发协作平台</h1>
         <p class="lead">
-          连接课程助教、工程实习、科研揭榜与项目协作。面向武大同学与发布方，用真实任务练手、交付与成长。
+          连接课程助教、工程实习、科研揭榜与难题协作。面向武大同学与发布方，用真实任务练手、交付与成长。
         </p>
         <div class="hero-actions">
           <a-button type="primary" size="large" @click="goPlaza">查看任务</a-button>
@@ -123,6 +124,8 @@ function goPlaza() {
         <span class="ring" />
       </div>
     </section>
+
+    <StudentHomeBoard v-if="auth.user?.role === 'STUDENT'" />
 
     <section class="panel" aria-labelledby="home-steps-title">
       <h2 id="home-steps-title">如何参与</h2>

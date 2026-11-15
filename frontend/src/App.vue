@@ -262,6 +262,29 @@ async function markOneRead(item: NotificationItem) {
   }
 }
 
+function notificationTarget(item: NotificationItem) {
+  const titled = item.body.match(/「([^」]+)」/)
+  const taskTitle = titled?.[1]
+  if (item.title === '任务私信') {
+    return taskTitle
+      ? { path: '/messages', query: { taskTitle } }
+      : '/messages'
+  }
+  if (item.body.includes('进入项目协作') || item.title.includes('通过')) {
+    if (user.value?.role === 'STUDENT') return '/me/workbench'
+    if (user.value?.role === 'PUBLISHER') return '/publisher/inbox'
+  }
+  return ''
+}
+
+async function openNotification(item: NotificationItem) {
+  await markOneRead(item)
+  const target = notificationTarget(item)
+  if (!target) return
+  drawerVisible.value = false
+  await router.push(target)
+}
+
 async function markAllRead() {
   try {
     await api('/api/v1/notifications/read-all', { method: 'POST' })
@@ -661,7 +684,7 @@ function formatTime(value: string) {
             :key="item.id"
             class="notification-item"
             :class="{ unread: !item.readAt }"
-            @click="markOneRead(item)"
+            @click="openNotification(item)"
           >
             <a-list-item-meta :title="item.title" :description="item.body">
               <template #avatar>

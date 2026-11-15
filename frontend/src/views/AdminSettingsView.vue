@@ -30,7 +30,7 @@ const SECTIONS: { key: SettingsSection; label: string; desc: string }[] = [
   { key: 'ark', label: '科研 RA · AI', desc: '揭榜方案可行性初判接入与 Prompt' },
   { key: 'rubric', label: 'WHU Dev 细则', desc: '能力裁定 Markdown 细则' },
   { key: 'tutorial', label: '教程文档', desc: '学生 / 发布方教程链接' },
-  { key: 'plaza', label: '频道说明', desc: '广场助教 / 开发 / 科研 / 项目简介' },
+  { key: 'plaza', label: '频道说明', desc: '广场助教 / 开发 / 科研 / 难题简介' },
   { key: 'sla', label: 'SLA', desc: '催办与升级天数' },
 ]
 
@@ -38,7 +38,7 @@ const DEFAULT_PLAZA_BLURBS = {
   plazaBlurbTa: '助教任务：课程支持、答疑与教学协作',
   plazaBlurbIntern: '开发任务：产品功能、工程实现与开源贡献',
   plazaBlurbRa: '科研任务：以揭榜形式开放方向，学生提交方案竞标',
-  plazaBlurbTeam: '项目：运营、标注等协作需求，按岗位报名，一次可招多人',
+  plazaBlurbTeam: '难题：运营、标注等协作需求，按岗位报名，一次可招多人',
 }
 
 const route = useRoute()
@@ -370,7 +370,7 @@ watch(
             <a-form-item label="科研">
               <a-input v-model="form.plazaBlurbRa" :max-length="200" show-word-limit allow-clear />
             </a-form-item>
-            <a-form-item label="项目">
+            <a-form-item label="难题">
               <a-input v-model="form.plazaBlurbTeam" :max-length="200" show-word-limit allow-clear />
             </a-form-item>
           </a-form>
