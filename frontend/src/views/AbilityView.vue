@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import StudentHomeBoard from '../components/StudentHomeBoard.vue'
+import { defineAsyncComponent } from 'vue'
+const StudentHomeBoard = defineAsyncComponent(() => import('../components/StudentHomeBoard.vue'))
 import { auth } from '../auth'
 import { readCachedSiteConfig } from '../siteConfigCache'
 
@@ -215,7 +216,7 @@ function goPlaza() {
 }
 .brand {
   margin: 0 0 12px;
-  font-family: "Sora", "Noto Sans SC", sans-serif;
+  font-family: var(--font);
   font-size: clamp(28px, 5vw, 42px);
   font-weight: 800;
   letter-spacing: -0.04em;
@@ -224,7 +225,7 @@ function goPlaza() {
 }
 .hero h1 {
   margin: 0;
-  font-family: "Sora", "Noto Sans SC", sans-serif;
+  font-family: var(--font);
   font-size: clamp(22px, 3.2vw, 32px);
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -451,7 +452,7 @@ function goPlaza() {
   letter-spacing: 0.02em;
 }
 .contact-name {
-  font-family: "Sora", "Noto Sans SC", sans-serif;
+  font-family: var(--font);
   font-size: 22px;
   font-weight: 750;
   letter-spacing: -0.03em;

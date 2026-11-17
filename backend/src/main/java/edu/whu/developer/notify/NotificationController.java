@@ -26,7 +26,7 @@ public class NotificationController {
     public List<NotificationView> list() {
         AuthSupport.current();
         return notifications.mine().stream()
-                .map(item -> new NotificationView(item.getId(), item.getTitle(), item.getBody(), item.getReadAt(), item.getCreatedAt()))
+                .map(item -> new NotificationView(item.getId(), item.getTitle(), item.getBody(), item.getTargetPath(), item.getReadAt(), item.getCreatedAt()))
                 .toList();
     }
 
@@ -55,6 +55,6 @@ public class NotificationController {
         return Map.of("deleted", notifications.deleteAllMine());
     }
 
-    public record NotificationView(Long id, String title, String body, LocalDateTime readAt, LocalDateTime createdAt) {
+    public record NotificationView(Long id, String title, String body, String targetPath, LocalDateTime readAt, LocalDateTime createdAt) {
     }
 }

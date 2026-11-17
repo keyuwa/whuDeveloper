@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
 import type { Task } from '../types'
@@ -7,20 +7,54 @@ import type { Task } from '../types'
 const tasks = ref<Task[]>([])
 const loading = ref(false)
 
-async function load() {
-  tasks.value = await api<Task[]>('/api/v1/admin/tasks')
-}
+const keyword = ref('')
+const sentinel = ref<HTMLElement | null>(null)
+const hasMore = ref(false)
+let requestId = 0
+let nextPage = 0
+let appliedKeyword = ''
 
-onMounted(async () => {
+async function load(append = false) {
+  if (append && (loading.value || !hasMore.value)) return
+  if (!append) {
+    appliedKeyword = keyword.value.trim()
+    nextPage = 0
+    hasMore.value = false
+    tasks.value = []
+  }
+  const id = ++requestId
   loading.value = true
   try {
-    await load()
+    const query = new URLSearchParams({ keyword: appliedKeyword, page: String(nextPage) })
+    const result = await api<{ items: Task[]; hasMore: boolean }>(`/api/v1/admin/tasks?${query}`)
+    if (id !== requestId) return
+    tasks.value = append ? [...tasks.value, ...result.items] : result.items
+    hasMore.value = result.hasMore
+    nextPage++
   } catch (cause) {
-    Message.error(cause instanceof Error ? cause.message : '加载失败')
+    if (id === requestId) Message.error(cause instanceof Error ? cause.message : '加载失败')
   } finally {
-    loading.value = false
+    if (id === requestId) loading.value = false
   }
+}
+
+function loadOnScroll() {
+  const bounds = sentinel.value?.getBoundingClientRect()
+  if (bounds && bounds.top < window.innerHeight && bounds.bottom > 0) {
+    void load(true)
+  }
+}
+
+onMounted(() => {
+  void load()
+  window.addEventListener('scroll', loadOnScroll, { capture: true, passive: true })
 })
+onUnmounted(() => window.removeEventListener('scroll', loadOnScroll, true))
+
+function clearFilter() {
+  keyword.value = ''
+  void load()
+}
 
 async function setStatus(task: Task, status: string) {
   try {
@@ -41,9 +75,13 @@ async function setStatus(task: Task, status: string) {
     <header class="page-head">
       <div>
         <a-typography-title :heading="4" style="margin: 0">任务</a-typography-title>
-        <p class="subtitle">管理发布与下架。</p>
+        <p class="subtitle">管理项目发布与撤下发布。</p>
       </div>
     </header>
+    <form class="task-filter" role="search" @submit.prevent="load()">
+      <a-input v-model="keyword" aria-label="搜索任务名称或编号" placeholder="任务名称或编号" allow-clear @clear="clearFilter" />
+      <a-button type="primary" html-type="submit" :loading="loading">筛选</a-button>
+    </form>
     <a-spin :loading="loading" style="width: 100%">
       <a-table :data="tasks" :pagination="false" row-key="id">
         <template #columns>
@@ -68,6 +106,21 @@ async function setStatus(task: Task, status: string) {
           </a-table-column>
         </template>
       </a-table>
+      <div v-if="hasMore" ref="sentinel" class="load-more">
+        <a-button type="text" :loading="loading" @click="load(true)">加载更多</a-button>
+      </div>
     </a-spin>
   </section>
 </template>
+
+
+<style scoped>
+.task-filter {
+  display: flex;
+  gap: 8px;
+  max-width: 420px;
+  margin-bottom: 16px;
+}
+.load-more { text-align: center; padding: 12px; }
+.task-filter :deep(.arco-input-wrapper) { min-width: 0; }
+</style>

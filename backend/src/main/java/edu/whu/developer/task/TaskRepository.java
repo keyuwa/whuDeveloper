@@ -2,6 +2,7 @@ package edu.whu.developer.task;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +11,16 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface TaskRepository extends JpaRepository<Task, Long> {
+
+    @EntityGraph(attributePaths = "publisher")
+    @Query("""
+            SELECT t FROM Task t
+            WHERE :keyword = ''
+               OR LOCATE(LOWER(:keyword), LOWER(t.title)) > 0
+               OR LOCATE(LOWER(:keyword), LOWER(t.publicCode)) > 0
+            ORDER BY t.id DESC
+            """)
+    Slice<Task> searchForAdmin(@Param("keyword") String keyword, Pageable pageable);
 
     List<Task> findByStatusOrderByIdDesc(String status);
 

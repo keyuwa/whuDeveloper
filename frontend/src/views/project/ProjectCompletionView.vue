@@ -1,11 +1,16 @@
 <script setup lang="ts">
+import ProjectDetailSection from '../../components/ProjectDetailSection.vue'
+
+defineProps<{ compact?: boolean }>()
+
 import { computed, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import type { RequestOption } from '@arco-design/web-vue/es/upload/interfaces'
 import { uploadPdf } from '../../api'
 import { useProjectWorkspace } from '../../composables/useProjectWorkspace'
 
-const { project, saving, isStudent, isPublisher, run } = useProjectWorkspace()
+const { project, saving, isStudent, isPublisher, basePath, run } = useProjectWorkspace()
+const reviewNote = ref('')
 const reportMd = ref('')
 const reportFileUrl = ref('')
 const reportFileName = ref('')
@@ -27,6 +32,20 @@ const completionStatusColor: Record<string, string> = {
 const canSubmit = computed(
   () => Boolean(reportMd.value.trim()) || Boolean(reportFileUrl.value.trim()),
 )
+
+async function reviewCompletion(decision: 'APPROVE' | 'REJECT') {
+  if (!project.value) return
+  if (decision === 'REJECT' && !reviewNote.value.trim()) {
+    Message.warning('请填写退回补充意见')
+    return
+  }
+  try {
+    await run(`/api/v1/projects/${project.value.id}/completion/review`, { decision, note: reviewNote.value.trim() })
+    reviewNote.value = ''
+  } catch {
+    // The workspace displays the server error.
+  }
+}
 
 function customUpload(option: RequestOption) {
   void doUpload(option)
@@ -86,11 +105,11 @@ async function submit() {
 
 <template>
   <section v-if="project" class="stack">
-    <a-alert class="soft-alert" type="info" :show-icon="true">
+    <a-alert v-if="!compact" class="soft-alert" type="info" :show-icon="true">
       按申请约定完成协作后提交结项：可交文字说明或 PDF，代码仓库 / PR 链接可选。
     </a-alert>
 
-    <a-card class="panel-card" title="结项验收" :bordered="false">
+    <ProjectDetailSection :plain="compact" :class="compact ? 'drawer-section' : 'panel-card'" title="结项验收" :bordered="false">
       <template v-if="project.completion">
         <div class="result-head">
           <a-tag :color="completionStatusColor[project.completion.status] || 'gray'" size="large">
@@ -124,24 +143,14 @@ async function submit() {
           </a>
         </div>
         <p v-if="project.completion.reviewNote" class="review-note">审阅意见：{{ project.completion.reviewNote }}</p>
-        <a-space
-          v-if="isPublisher && project.status === 'COMPLETING' && project.completion.status === 'SUBMITTED'"
-          style="margin-top: 16px"
-        >
-          <a-button
-            type="primary"
-            :loading="saving"
-            @click="run(`/api/v1/projects/${project.id}/completion/review`, { decision: 'APPROVE', note: '通过' })"
-          >
-            通过结项
-          </a-button>
-          <a-button
-            :loading="saving"
-            @click="run(`/api/v1/projects/${project.id}/completion/review`, { decision: 'REJECT', note: '请补充材料' })"
-          >
-            驳回
-          </a-button>
-        </a-space>
+        <div v-if="isPublisher && project.status === 'COMPLETING' && project.completion.status === 'SUBMITTED'" class="completion-review">
+          <router-link :to="`${basePath}/progress`">查看历史周报</router-link>
+          <a-textarea v-model="reviewNote" :max-length="500" :auto-size="{ minRows: 2, maxRows: 5 }" placeholder="验收意见（退回时必填）" />
+          <a-space wrap>
+            <a-button type="primary" :loading="saving" @click="reviewCompletion('APPROVE')">通过结项</a-button>
+            <a-button :disabled="!reviewNote.trim()" :loading="saving" @click="reviewCompletion('REJECT')">退回补充</a-button>
+          </a-space>
+        </div>
       </template>
 
       <div v-if="isStudent && project.status === 'ACTIVE' && (!project.completion || project.completion.status === 'REJECTED')" class="submit-box">
@@ -207,11 +216,12 @@ async function submit() {
         v-if="!project.completion && (!isStudent || project.status !== 'ACTIVE')"
         description="尚未提交结项材料"
       />
-    </a-card>
+    </ProjectDetailSection>
   </section>
 </template>
 
 <style scoped>
+.completion-review { display: grid; gap: 12px; margin-top: 16px; }
 .panel-card {
   background: var(--color-bg-2);
   border-radius: 10px;

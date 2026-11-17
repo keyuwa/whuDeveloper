@@ -307,10 +307,14 @@ public class TaskService {
     }
 
     @Transactional(readOnly = true)
-    public List<TaskResponse> allForAdmin() {
+    public AdminTaskPage recentForAdmin(String keyword, int page) {
         AuthSupport.requireRole(Role.ADMIN);
-        return tasks.findAll().stream().map(task -> toResponse(task, AuthSupport.current())).toList();
+        var viewer = AuthSupport.current();
+        var result = tasks.searchForAdmin(keyword.trim(), PageRequest.of(Math.max(0, page), 20));
+        return new AdminTaskPage(result.map(task -> toResponse(task, viewer)).getContent(), result.hasNext());
     }
+
+    public record AdminTaskPage(List<TaskResponse> items, boolean hasMore) {}
 
     @Transactional
     public TaskResponse adminStatus(Long id, String status) {

@@ -33,6 +33,9 @@ public class Notification {
     @Column(nullable = false, length = 1000)
     private String body;
 
+    @Column(name = "target_path", length = 255)
+    private String targetPath;
+
     @Column(name = "read_at")
     private LocalDateTime readAt;
 

@@ -4,6 +4,9 @@ import { Message } from '@arco-design/web-vue'
 import { api } from '../../api'
 import { useProjectWorkspace } from '../../composables/useProjectWorkspace'
 import type { Task } from '../../types'
+import ProjectDetailSection from '../../components/ProjectDetailSection.vue'
+
+defineProps<{ compact?: boolean }>()
 
 const { project, id } = useProjectWorkspace()
 const task = ref<Task | null>(null)
@@ -62,16 +65,16 @@ watch(
 <template>
   <a-spin :loading="loading" style="width: 100%">
     <template v-if="task">
-      <a-alert class="soft-alert" type="info" :show-icon="true" style="margin-bottom: 16px">
+      <a-alert v-if="!compact" class="soft-alert" type="info" :show-icon="true" style="margin-bottom: 16px">
         发布方项目原文。周报与结项请使用上方页签。
       </a-alert>
 
-      <div class="detail-grid">
-        <div class="main-col stack">
-          <a-card class="panel-card" title="项目介绍" :bordered="false">
+      <div class="detail-grid" :class="{ 'compact-detail': compact }">
+        <div class="main-col stack" :class="{ 'project-document-surface': !compact }">
+          <ProjectDetailSection :plain="true" class="plain-section" title="项目介绍" :bordered="false">
             <a-typography-paragraph style="margin-bottom: 0">{{ task.background }}</a-typography-paragraph>
             <template v-if="task.prdFileUrl || task.prdMd">
-              <a-divider style="margin: 18px 0" />
+              <a-divider v-if="!compact" style="margin: 18px 0" />
               <div v-if="task.prdFileUrl" class="doc-file">
                 <strong>需求文档</strong>
                 <a :href="task.prdFileUrl" target="_blank" rel="noopener">{{ task.prdFileName || '打开 PDF' }}</a>
@@ -83,34 +86,34 @@ watch(
                 </template>
               </div>
             </template>
-          </a-card>
+          </ProjectDetailSection>
 
-          <a-card class="panel-card" title="项目产出要求" :bordered="false">
+          <ProjectDetailSection :plain="true" class="plain-section" title="项目产出要求" :bordered="false">
             <pre class="md">{{ task.outputRequirement }}</pre>
-          </a-card>
+          </ProjectDetailSection>
 
-          <a-card class="panel-card" title="能力要求" :bordered="false">
+          <ProjectDetailSection :plain="true" class="plain-section" title="能力要求" :bordered="false">
             <pre class="md">{{ task.techRequirement }}</pre>
-          </a-card>
+          </ProjectDetailSection>
 
-          <a-card v-if="task.stipendText" class="panel-card" title="补助水平" :bordered="false">
+          <ProjectDetailSection :plain="true" v-if="task.stipendText" class="plain-section" title="补助水平" :bordered="false">
             <pre class="md">{{ task.stipendText }}</pre>
-          </a-card>
+          </ProjectDetailSection>
 
-          <a-card v-if="task.learningMaterials" class="panel-card" title="学习资料" :bordered="false">
+          <ProjectDetailSection :plain="true" v-if="task.learningMaterials" class="plain-section" title="学习资料" :bordered="false">
             <pre class="md">{{ task.learningMaterials }}</pre>
-          </a-card>
+          </ProjectDetailSection>
 
-          <a-card v-if="task.techDocFileUrl || task.techDocMd" class="panel-card" title="技术文档" :bordered="false">
+          <ProjectDetailSection :plain="true" v-if="task.techDocFileUrl || task.techDocMd" class="plain-section" title="技术文档" :bordered="false">
             <div v-if="task.techDocFileUrl" class="doc-file">
               <a :href="task.techDocFileUrl" target="_blank" rel="noopener">{{ task.techDocFileName || '打开技术文档 PDF' }}</a>
             </div>
             <pre v-if="task.techDocMd" class="md">{{ task.techDocMd }}</pre>
-          </a-card>
+          </ProjectDetailSection>
         </div>
 
         <aside class="side-col stack">
-          <a-card class="meta-card" title="项目信息">
+          <ProjectDetailSection :plain="compact" :class="compact ? 'plain-meta' : 'meta-card'" title="项目信息">
             <div class="meta-list">
               <div class="meta-row">
                 <span class="meta-label">发布方</span>
@@ -149,7 +152,7 @@ watch(
                 <span v-else class="muted">未提供</span>
               </div>
             </div>
-          </a-card>
+          </ProjectDetailSection>
         </aside>
       </div>
     </template>
@@ -160,6 +163,88 @@ watch(
 </template>
 
 <style scoped>
+.project-document-surface {
+  padding: 28px;
+  background: #fff;
+  border: 1px solid #e5eaf1;
+  border-radius: 12px;
+  gap: 28px;
+  min-width: 0;
+}
+.project-document-surface .md {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 768px) {
+  .project-document-surface { padding: 20px 18px; gap: 24px; }
+}
+
+.detail-grid.compact-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 12px 20px 24px;
+  gap: 28px;
+}
+.compact-detail .side-col { order: -1; }
+.compact-detail .main-col { gap: 28px; }
+.compact-detail .doc-file { margin-top: 16px; padding: 12px 16px; border: 0; border-radius: 6px; }
+.compact-detail .panel-card,
+.compact-detail .meta-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.compact-detail .meta-card { position: static; }
+.compact-detail :deep(.arco-card-header) {
+  min-height: 0;
+  height: auto;
+  padding: 0 0 10px;
+  border: 0;
+  background: transparent;
+}
+.compact-detail :deep(.arco-card-header-title) {
+  font-size: 15px;
+  font-weight: 600;
+  color: #172033;
+}
+.compact-detail :deep(.arco-card-body) {
+  padding: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.85;
+  color: #475569;
+}
+.compact-detail .meta-card :deep(.arco-card-header) { display: none; }
+.compact-detail .plain-meta :deep(h3) { display: none; }
+.compact-detail .meta-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 28px;
+  padding: 20px 0 24px;
+  border-bottom: 1px solid #e8edf3;
+}
+.compact-detail .meta-row {
+  grid-template-columns: 70px minmax(0, 1fr);
+  font-size: 13px;
+}
+.compact-detail .meta-label { color: #8691a1; }
+.compact-detail .md {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.compact-detail :deep(.arco-typography) { font-size: 14px; line-height: 1.85; color: #475569; }
 .detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;

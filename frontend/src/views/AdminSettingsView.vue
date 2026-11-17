@@ -4,8 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
 import { renderMarkdown } from '../markdown'
+import { proposalGuideText, type ProposalChannel, type ProposalGuide, type ProposalGuides } from '../proposalGuides'
+import type { RecommendationConfig } from '../majorMatch'
 
-type SettingsSection = 'ark' | 'rubric' | 'tutorial' | 'plaza' | 'sla'
+type SettingsSection = 'recommendation' | 'proposal' | 'ark' | 'rubric' | 'tutorial' | 'plaza' | 'sla'
 
 type SettingsPayload = {
   reviewSlaDays: number
@@ -27,6 +29,8 @@ type SettingsPayload = {
 }
 
 const SECTIONS: { key: SettingsSection; label: string; desc: string }[] = [
+  { key: 'recommendation', label: '任务推荐', desc: '配置四个频道的匹配规则与硕博科研优先名额' },
+  { key: 'proposal', label: '申请结构提示', desc: '按频道配置申请提示' },
   { key: 'ark', label: '科研 RA · AI', desc: '揭榜方案可行性初判接入与 Prompt' },
   { key: 'rubric', label: 'WHU Dev 细则', desc: '能力裁定 Markdown 细则' },
   { key: 'tutorial', label: '教程文档', desc: '学生 / 发布方教程链接' },
@@ -56,10 +60,7 @@ const form = reactive({
   tutorialDocUrlStudent: '',
   tutorialDocUrlPublisher: '',
   tutorialBannerText: '查看使用教程',
-  plazaBlurbTa: DEFAULT_PLAZA_BLURBS.plazaBlurbTa,
-  plazaBlurbIntern: DEFAULT_PLAZA_BLURBS.plazaBlurbIntern,
-  plazaBlurbRa: DEFAULT_PLAZA_BLURBS.plazaBlurbRa,
-  plazaBlurbTeam: DEFAULT_PLAZA_BLURBS.plazaBlurbTeam,
+  ...DEFAULT_PLAZA_BLURBS,
   abilityRubricMd: '',
   arkEnabled: false,
   arkApiKey: '',
@@ -71,7 +72,7 @@ const form = reactive({
 })
 
 function isSettingsSection(value: string): value is SettingsSection {
-  return value === 'ark' || value === 'rubric' || value === 'tutorial' || value === 'plaza' || value === 'sla'
+  return value === 'recommendation' || value === 'proposal' || value === 'ark' || value === 'rubric' || value === 'tutorial' || value === 'plaza' || value === 'sla'
 }
 
 const section = computed<SettingsSection>(() => {
@@ -87,6 +88,77 @@ const promptPlaceholder = `留空则使用内置默认模板。可用占位符�
 {{title}} {{techField}} {{background}} {{outputRequirement}} {{techRequirement}} {{proposal}}
 
 请让模型输出 JSON：score、completeness、fit、feasibility、evidence、summary、risks。`
+
+const recommendationChannels = [
+  { key: 'ta', label: '助教' },
+  { key: 'intern', label: '开发' },
+  { key: 'ra', label: '科研' },
+  { key: 'team', label: '难题' },
+] as const
+const recommendationDraft = reactive({ ta: '', intern: '', ra: '', team: '', masterSlots: 2, doctorSlots: 3 })
+const ruleExample = '[{"majors":["计算机","软件工程"],"keywords":["人工智能","网络安全"],"field":"DIRECTION","score":8}]'
+
+function applyRecommendation(config: RecommendationConfig) {
+  for (const { key } of recommendationChannels) {
+    recommendationDraft[key] = config[key] === null ? '' : JSON.stringify(config[key], null, 2)
+  }
+  recommendationDraft.masterSlots = config.masterSlots
+  recommendationDraft.doctorSlots = config.doctorSlots
+}
+
+async function saveRecommendation() {
+  const body: Record<string, unknown> = {
+    masterSlots: recommendationDraft.masterSlots,
+    doctorSlots: recommendationDraft.doctorSlots,
+  }
+  for (const { key, label } of recommendationChannels) {
+    const input = recommendationDraft[key].trim()
+    if (!input) {
+      body[key] = null
+      continue
+    }
+    let rules: unknown
+    try {
+      rules = JSON.parse(input)
+    } catch {
+      throw new Error(`${label}频道的规则不是有效的 JSON`)
+    }
+    if (!Array.isArray(rules)) throw new Error(`${label}频道的规则须为 JSON 数组`)
+    body[key] = rules
+  }
+  const saved = await api<RecommendationConfig>('/api/v1/admin/settings/recommendation', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+  applyRecommendation(saved)
+}
+
+const proposalChannels = [
+  { value: 'TA', label: '助教' },
+  { value: 'INTERN', label: '开发' },
+  { value: 'RA', label: '科研' },
+  { value: 'TEAM', label: '难题' },
+] as const
+const activeProposalChannel = ref<ProposalChannel>('TA')
+const proposalDrafts = ref<Record<ProposalChannel, string>>()
+const activeProposalText = computed({
+  get: () => proposalDrafts.value?.[activeProposalChannel.value] ?? '',
+  set: (text: string) => {
+    if (proposalDrafts.value) proposalDrafts.value[activeProposalChannel.value] = text
+  },
+})
+
+async function saveProposalGuide() {
+  const channel = activeProposalChannel.value
+  if (!proposalDrafts.value) throw new Error('请先加载申请结构提示')
+  const text = activeProposalText.value
+  if (text.length > 10000) throw new Error('结构提示须在 10000 字以内')
+  const saved = await api<ProposalGuide>(`/api/v1/admin/settings/proposal/${channel}`, {
+    method: 'PUT',
+    body: JSON.stringify({ introduction: text, experience: '', approach: '', schedule: '' }),
+  })
+  proposalDrafts.value[channel] = proposalGuideText(saved)
+}
 
 function applySettings(settings: SettingsPayload) {
   form.reviewSlaDays = settings.reviewSlaDays
@@ -110,6 +182,21 @@ function applySettings(settings: SettingsPayload) {
 async function loadSettings() {
   loadingPage.value = true
   try {
+    if (section.value === 'proposal') {
+      const guides = await api<ProposalGuides>('/api/v1/proposal-guides')
+      proposalDrafts.value = {
+        TA: proposalGuideText(guides.TA),
+        INTERN: proposalGuideText(guides.INTERN),
+        RA: proposalGuideText(guides.RA),
+        TEAM: proposalGuideText(guides.TEAM),
+      }
+      return
+    }
+    if (section.value === 'recommendation') {
+      const config = await api<RecommendationConfig>('/api/v1/recommendation-rules')
+      if (section.value === 'recommendation') applyRecommendation(config)
+      return
+    }
     const settings = await api<SettingsPayload>('/api/v1/admin/settings')
     applySettings(settings)
     if (section.value === 'rubric' && !form.abilityRubricMd.trim()) {
@@ -131,7 +218,18 @@ function goSection(key: SettingsSection) {
 async function saveCurrent() {
   saving.value = true
   try {
-    const bodies: Record<SettingsSection, Record<string, unknown>> = {
+    const currentSection = section.value
+    if (currentSection === 'proposal') {
+      await saveProposalGuide()
+      Message.success('已保存当前频道')
+      return
+    }
+    if (currentSection === 'recommendation') {
+      await saveRecommendation()
+      Message.success('已保存')
+      return
+    }
+    const bodies: Record<Exclude<SettingsSection, 'recommendation' | 'proposal'>, Record<string, unknown>> = {
       ark: {
         arkEnabled: form.arkEnabled,
         arkApiKey: form.arkApiKey.trim() || null,
@@ -157,9 +255,9 @@ async function saveCurrent() {
         escalateSlaDays: form.escalateSlaDays,
       },
     }
-    const updated = await api<SettingsPayload>(`/api/v1/admin/settings/${section.value}`, {
+    const updated = await api<SettingsPayload>(`/api/v1/admin/settings/${currentSection}`, {
       method: 'PUT',
-      body: JSON.stringify(bodies[section.value]),
+      body: JSON.stringify(bodies[currentSection]),
     })
     applySettings(updated)
     if (section.value === 'ark') {
@@ -231,15 +329,7 @@ watch(
 <template>
   <div class="settings-page">
     <header class="settings-head">
-      <div>
-        <a-typography-title :heading="4" style="margin: 0">系统设置</a-typography-title>
-        <p class="subtitle">{{ currentMeta.desc }}</p>
-      </div>
-      <a-space wrap>
-        <a-button size="small" @click="router.push('/admin/dicts')">字典配置</a-button>
-        <a-button size="small" @click="router.push('/admin/tasks')">任务管理</a-button>
-        <a-button size="small" @click="router.push('/admin/reminders')">催办队列</a-button>
-      </a-space>
+      <h1>系统设置</h1>
     </header>
 
     <nav class="section-tabs" aria-label="设置分类">
@@ -248,7 +338,7 @@ watch(
         :key="item.key"
         type="button"
         class="section-tab"
-        :class="{ active: section === item.key }"
+        :aria-current="section === item.key ? 'page' : undefined"
         @click="goSection(item.key)"
       >
         {{ item.label }}
@@ -256,7 +346,11 @@ watch(
     </nav>
 
     <a-spin :loading="loadingPage" style="width: 100%">
-      <a-card :title="currentMeta.label" class="settings-card">
+      <section class="settings-card" aria-labelledby="settings-section-title">
+        <header class="section-heading">
+          <h2 id="settings-section-title">{{ currentMeta.label }}</h2>
+          <p>{{ currentMeta.desc }}</p>
+        </header>
         <template v-if="section === 'ark'">
           <a-typography-paragraph type="secondary">
             仅对科研 RA 揭榜方案做可行性初判。接入 Agent Plan / 方舟；Key 仅管理员可改，接口脱敏展示。AI 结果仅供发布方参考，不自动揭榜。
@@ -356,6 +450,40 @@ watch(
           </a-form>
         </template>
 
+        <template v-else-if="section === 'recommendation'">
+          <a-typography-paragraph type="secondary">
+            每个频道可填写一组 JSON 规则，留空使用内置规则，填 [] 关闭该频道的匹配加分。
+            majors 为简历专业别名，空数组匹配所有已填写专业的学生。keywords 任一命中即加一次 score（1–100 分）。
+          </a-typography-paragraph>
+          <a-typography-paragraph type="secondary">
+            field 支持 DIRECTION（方向）、TITLE（标题）、CONTENT（正文和要求）、LANGUAGE（编程语言）、POSITION（岗位）、ANY（任意字段）。
+          </a-typography-paragraph>
+          <a-form :model="recommendationDraft" layout="vertical">
+            <a-form-item label="硕士首页 RA 优先名额">
+              <a-input-number v-model="recommendationDraft.masterSlots" :min="0" :max="4" :precision="0" />
+            </a-form-item>
+            <a-form-item label="博士首页 RA 优先名额">
+              <a-input-number v-model="recommendationDraft.doctorSlots" :min="0" :max="4" :precision="0" />
+            </a-form-item>
+            <a-form-item v-for="channel in recommendationChannels" :key="channel.key" :label="`${channel.label}推荐规则`">
+              <a-textarea v-model="recommendationDraft[channel.key]" :auto-size="{ minRows: 3, maxRows: 12 }" :placeholder="ruleExample" />
+            </a-form-item>
+          </a-form>
+        </template>
+
+        <template v-else-if="section === 'proposal'">
+          <a-radio-group v-model="activeProposalChannel" type="button" :disabled="saving">
+            <a-radio v-for="channel in proposalChannels" :key="channel.value" :value="channel.value">
+              {{ channel.label }}
+            </a-radio>
+          </a-radio-group>
+          <a-form v-if="proposalDrafts" :model="proposalDrafts" layout="vertical" style="margin-top: 16px">
+            <a-form-item label="结构提示">
+              <a-textarea v-model="activeProposalText" :max-length="10000" :auto-size="{ minRows: 6, maxRows: 16 }" show-word-limit />
+            </a-form-item>
+          </a-form>
+        </template>
+
         <template v-else-if="section === 'plaza'">
           <a-typography-paragraph type="secondary">
             文案显示在任务广场四个频道卡片下方；留空保存时回退为默认说明。
@@ -391,9 +519,9 @@ watch(
         </template>
 
         <div class="card-actions">
-          <a-button type="primary" :loading="saving" @click="saveCurrent">保存本页</a-button>
+          <a-button type="primary" :loading="saving" @click="saveCurrent">{{ section === 'proposal' ? '保存当前频道' : '保存本页' }}</a-button>
         </div>
-      </a-card>
+      </section>
     </a-spin>
   </div>
 </template>
@@ -403,48 +531,52 @@ watch(
   width: min(920px, 100%);
   margin: 0 auto;
 }
-.settings-head {
-  margin-bottom: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-.subtitle {
-  margin: 6px 0 0;
-  color: #6b7280;
-  font-size: 13px;
-}
+.settings-head { margin-bottom: 18px; }
+.settings-head h1 { margin: 0; font-size: 24px; color: var(--color-text-1); }
 .section-tabs {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 20px;
+  overflow-x: auto;
+  padding: 0 4px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--color-border-2);
 }
 .section-tab {
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  color: #374151;
-  border-radius: 999px;
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 600;
+  flex: none;
+  min-height: 44px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-2);
+  font: inherit;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
-.section-tab:hover {
-  border-color: #93c5fd;
-  color: #1d4ed8;
+.section-tab:hover,
+.section-tab[aria-current="page"] { color: rgb(var(--primary-6)); }
+.section-tab[aria-current="page"] { border-bottom-color: rgb(var(--primary-6)); font-weight: 600; }
+.section-tab:focus-visible { outline-offset: -3px; }
+.settings-card {
+  padding: 24px;
+  border: 1px solid var(--color-border-2);
+  border-radius: 12px;
+  background: var(--color-bg-2);
 }
-.section-tab.active {
-  border-color: #2563eb;
-  background: #eff6ff;
-  color: #1d4ed8;
+.section-heading { margin-bottom: 24px; }
+.section-heading h2 { margin: 0; font-size: 18px; color: var(--color-text-1); }
+.section-heading p { margin: 6px 0 0; color: var(--color-text-2); line-height: 1.6; }
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-2);
 }
-.settings-card { width: 100%; }
-.card-actions { margin-top: 16px; }
+@media (max-width: 768px) {
+  .settings-head h1 { font-size: 20px; }
+  .settings-card { padding: 16px; }
+  .section-tabs { gap: 16px; }
+}
 .test-row {
   display: flex;
   flex-wrap: wrap;

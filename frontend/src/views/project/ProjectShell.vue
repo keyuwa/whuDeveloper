@@ -17,7 +17,7 @@ const backLabel = computed(() => (auth.user?.role === 'PUBLISHER' ? '返回审�
 const canLeave = computed(
   () => isStudent.value && project.value && ['ACTIVE', 'COMPLETING'].includes(project.value.status),
 )
-const showApplicationTab = computed(() => isPublisher.value)
+const showApplicationTab = computed(() => isPublisher.value || isStudent.value)
 
 const statusLabel: Record<string, string> = {
   ACTIVE: '进行中',

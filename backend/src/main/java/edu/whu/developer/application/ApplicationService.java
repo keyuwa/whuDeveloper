@@ -397,7 +397,8 @@ public class ApplicationService {
                 application.getAiStatus(),
                 application.getAiScoredAt(),
                 application.getCreatedAt(),
-                projectId);
+                projectId,
+                task.getPublisher().getRealName() == null ? task.getPublisher().getDisplayName() : task.getPublisher().getRealName());
     }
 
     private String blank(String value) {
@@ -481,7 +482,8 @@ public class ApplicationService {
             String aiStatus,
             LocalDateTime aiScoredAt,
             LocalDateTime createdAt,
-            Long projectId
+            Long projectId,
+            String publisherName
     ) {
     }
 }

@@ -25,6 +25,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -98,8 +99,10 @@ public class AdminController {
     }
 
     @GetMapping("/tasks")
-    public List<TaskResponse> tasks() {
-        return tasks.allForAdmin();
+    public TaskService.AdminTaskPage tasks(
+            @RequestParam(defaultValue = "") String keyword,
+            @RequestParam(defaultValue = "0") int page) {
+        return tasks.recentForAdmin(keyword, page);
     }
 
     @PatchMapping("/tasks/{id}")
@@ -195,6 +198,26 @@ public class AdminController {
         return currentSettings();
     }
 
+    @PutMapping("/settings/proposal")
+    @org.springframework.transaction.annotation.Transactional
+    public SettingsView updateProposalSettings(@Valid @RequestBody ProposalSettingsRequest request) {
+        AuthUser admin = AuthSupport.requireRole(Role.ADMIN);
+        settings.put("proposal_guide_introduction", request.proposalGuideIntroduction());
+        settings.put("proposal_guide_experience", request.proposalGuideExperience());
+        settings.put("proposal_guide_approach", request.proposalGuideApproach());
+        settings.put("proposal_guide_schedule", request.proposalGuideSchedule());
+        audit.record(admin.getId(), "SETTINGS", 0L, "UPDATE", "proposal");
+        return currentSettings();
+    }
+
+    public record ProposalSettingsRequest(
+            @NotNull @Size(max = 10000) String proposalGuideIntroduction,
+            @NotNull @Size(max = 10000) String proposalGuideExperience,
+            @NotNull @Size(max = 10000) String proposalGuideApproach,
+            @NotNull @Size(max = 10000) String proposalGuideSchedule
+    ) {
+    }
+
     @PutMapping("/settings/plaza")
     public SettingsView updatePlazaSettings(@Valid @RequestBody PlazaSettingsRequest request) {
         AuthUser admin = AuthSupport.requireRole(Role.ADMIN);
@@ -248,6 +271,10 @@ public class AdminController {
                 studentTutorial,
                 settings.getString("tutorial_doc_url_publisher", ""),
                 settings.getString("tutorial_banner_text", "查看使用教程"),
+                settings.getRaw("proposal_guide_introduction", "## 自我介绍"),
+                settings.getRaw("proposal_guide_experience", "## 相关经验"),
+                settings.getRaw("proposal_guide_approach", "## 技术方案"),
+                settings.getRaw("proposal_guide_schedule", "## 时间计划"),
                 settings.getString("plaza_blurb_ta", SiteConfigController.DEFAULT_BLURB_TA),
                 settings.getString("plaza_blurb_intern", SiteConfigController.DEFAULT_BLURB_INTERN),
                 settings.getString("plaza_blurb_ra", SiteConfigController.DEFAULT_BLURB_RA),
@@ -344,6 +371,10 @@ public class AdminController {
             String tutorialDocUrlStudent,
             String tutorialDocUrlPublisher,
             String tutorialBannerText,
+            String proposalGuideIntroduction,
+            String proposalGuideExperience,
+            String proposalGuideApproach,
+            String proposalGuideSchedule,
             String plazaBlurbTa,
             String plazaBlurbIntern,
             String plazaBlurbRa,

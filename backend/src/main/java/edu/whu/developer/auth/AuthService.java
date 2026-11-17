@@ -69,7 +69,10 @@ public class AuthService {
         otp.setCodeHash(hash(code));
         otp.setExpiresAt(LocalDateTime.now().plusMinutes(ttlMinutes));
         otps.save(otp);
-        mail.send(email, "WHU TOP Developer 注册验证码", "验证码 " + code + "，" + ttlMinutes + " 分钟内有效。");
+        if (!exposeOtp) {
+            mail.sendRequired(email, "WHU TOP Developer 注册验证码",
+                    "验证码 " + code + "，" + ttlMinutes + " 分钟内有效。");
+        }
         return new OtpResponse(true, exposeOtp ? code : null);
     }
 

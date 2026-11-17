@@ -93,7 +93,7 @@ function listQuery(extra: Record<string, string> = {}) {
 const statusLabel: Record<string, string> = {
   DRAFT: '草稿',
   OPEN: '已发布',
-  CLOSED: '已下架',
+  CLOSED: '已撤下',
 }
 
 const statusColor: Record<string, string> = {
@@ -128,7 +128,7 @@ const emptyDescription = computed(() => {
   const role = TASK_ROLE_LABEL[roleTab.value] || roleTab.value
   if (statusTab.value === 'OPEN') return `暂无已发布的${role}`
   if (statusTab.value === 'DRAFT') return `暂无${role}草稿`
-  if (statusTab.value === 'CLOSED') return `暂无已下架的${role}`
+  if (statusTab.value === 'CLOSED') return `暂无已撤下的${role}`
   return `还没有${role}`
 })
 
@@ -260,7 +260,7 @@ async function act(id: number, action: 'publish' | 'close') {
   try {
     await api(`/api/v1/publisher/tasks/${id}/${action}`, { method: 'POST' })
     await load(true)
-    Message.success(action === 'publish' ? '已发布' : '已下架')
+    Message.success(action === 'publish' ? '已发布' : '已撤下')
   } catch (cause) {
     Message.error(cause instanceof Error ? cause.message : '操作失败')
   }
@@ -324,7 +324,7 @@ function openInbox(taskId?: number) {
         <a-option value="ALL">全部状态</a-option>
         <a-option value="OPEN">已发布</a-option>
         <a-option value="DRAFT">草稿</a-option>
-        <a-option value="CLOSED">已下架</a-option>
+        <a-option value="CLOSED">已撤下</a-option>
       </a-select>
       <a-button v-if="keyword || statusTab !== 'ALL'" type="text" @click="keyword = ''; statusTab = 'ALL'">清空</a-button>
     </TaskFilterBar>
@@ -334,21 +334,25 @@ function openInbox(taskId?: number) {
       <a-empty v-if="!loading && tasks.length === 0" :description="emptyDescription" />
       <div v-else class="stack">
         <div :class="{ 'desktop-split': !isMobile }">
-        <nav v-if="!isMobile && tasks.length" class="desktop-list" aria-label="已发布任务">
-          <button v-for="task in tasks" :key="task.id" type="button" class="desktop-list-item"
+        <nav v-if="!isMobile && tasks.length" class="publisher-task-list" aria-label="任务列表">
+          <button v-for="task in tasks" :key="task.id" type="button" class="publisher-task-option"
             :aria-pressed="activeTask?.id === task.id" @click="selectedTaskId = task.id">
-            <strong>{{ task.title }}</strong>
-            <span>{{ statusLabel[task.status] || task.status }} · 已入项 {{ task.filled }}/{{ task.quota }}</span>
-            <span v-if="task.pendingApplications">待审 {{ task.pendingApplications }}</span>
+            <span class="option-heading">
+              <strong>{{ task.title }}</strong>
+              <a-tag v-if="task.pendingApplications" color="arcoblue" size="small">待审 {{ task.pendingApplications }}</a-tag>
+            </span>
+            <span class="option-meta">
+              <span>{{ statusLabel[task.status] || task.status }}</span>
+              <span>已入项 {{ task.filled }}/{{ task.quota }}</span>
+            </span>
           </button>
           <div
-            v-if="tasks.length || hasMore"
+            v-if="hasMore"
             ref="loadMoreSentinel"
             class="load-more-sentinel"
             aria-hidden="true"
           />
           <div v-if="loadingMore" class="load-more-status in-list">加载更多…</div>
-          <div v-else-if="tasks.length && !hasMore" class="load-more-status in-list muted">已经到底了</div>
         </nav>
         <div class="stack desktop-detail">
         <a-card v-for="task in displayedTasks" :key="task.id" class="task-card">
@@ -421,7 +425,7 @@ function openInbox(taskId?: number) {
                 size="small"
                 @click="act(task.id, 'close')"
               >
-                下架
+                撤下发布
               </a-button>
               <a-button
                 v-if="canDelete(task)"
@@ -805,7 +809,37 @@ function openInbox(taskId?: number) {
   min-width: 0;
 }
 .board-spin { width: 100%; }
-.publisher-board:not(.publisher-mobile) .desktop-split { align-items: start; }
+.publisher-board:not(.publisher-mobile) .desktop-split {
+  grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.publisher-task-list { display: grid; gap: 8px; min-width: 0; }
+.publisher-task-option {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border-2);
+  border-radius: 10px;
+  background: var(--color-bg-2);
+  color: var(--color-text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.publisher-task-option:hover,
+.publisher-task-option[aria-pressed="true"] {
+  border-color: rgb(var(--primary-6));
+}
+.publisher-task-option[aria-pressed="true"] { background: rgb(var(--primary-1)); }
+.publisher-task-option:focus-visible { outline: 2px solid rgb(var(--primary-6)); outline-offset: 2px; }
+.option-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.option-heading strong { min-width: 0; overflow-wrap: anywhere; }
+.option-heading :deep(.arco-tag) { flex-shrink: 0; }
+.option-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--color-text-2); }
+.publisher-board:not(.publisher-mobile) .desktop-detail .task-card :deep(.arco-card-body) { padding: 22px 24px; }
+
 .publisher-board:not(.publisher-mobile) .desktop-list {
   max-height: max(240px, calc(100dvh - var(--desktop-header-height, 58px) - 180px));
   overflow-y: auto;

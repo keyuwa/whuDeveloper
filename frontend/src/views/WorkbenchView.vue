@@ -3,10 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { api } from '../api'
+import WorkbenchProjectPanel from '../components/WorkbenchProjectPanel.vue'
 import { useIsMobile } from '../composables/useDevice'
 import { TASK_ROLE_LABEL, TASK_ROLE_TYPES, type Application, type Project, type Task } from '../types'
-
-const ROLE_STORAGE_KEY = 'student.workbench.roleType'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,26 +14,33 @@ const projects = ref<Project[]>([])
 const applications = ref<Application[]>([])
 const shortlists = ref<Task[]>([])
 const loading = ref(false)
-
-function parseRoleTab(value: unknown): 'TA' | 'INTERN' | 'RA' | 'TEAM' | null {
-  const normalized = String(value || '').toUpperCase()
-  return normalized === 'TA' || normalized === 'INTERN' || normalized === 'RA' || normalized === 'TEAM'
-    ? normalized
-    : null
+const error = ref('')
+const selected = ref<Project | null>(null)
+const panelTab = ref('detail')
+const roleTab = computed(() => String(route.query.roleType || ''))
+const search = computed(() => String(route.query.q || ''))
+const tab = computed(() => route.path.includes('/applications') ? 'applications' : route.path.includes('/candidates') ? 'candidates' : route.query.view === 'ended' ? 'ended' : 'enrolled')
+function filterQuery(key: string, value: string) {
+  void router.replace({ query: { ...route.query, [key]: value || undefined } })
 }
-
-const roleTab = ref<'TA' | 'INTERN' | 'RA' | 'TEAM'>(
-  parseRoleTab(route.query.roleType) ||
-    parseRoleTab(sessionStorage.getItem(ROLE_STORAGE_KEY)) ||
-    'INTERN',
-)
-
-const tab = computed(() => {
-  if (route.path.includes('/applications')) return 'applications'
-  if (route.path.includes('/candidates')) return 'candidates'
-  return 'enrolled'
-})
-
+function matches(title: string, role?: string) {
+  return (!roleTab.value || role === roleTab.value) && title.toLowerCase().includes(search.value.trim().toLowerCase())
+}
+const activeProjects = computed(() => projects.value.filter(item => ['ACTIVE', 'COMPLETING'].includes(item.status)))
+const endedProjects = computed(() => projects.value.filter(item => ['COMPLETED', 'TERMINATED'].includes(item.status)))
+const orderedProjects = computed(() => (tab.value === 'ended' ? endedProjects.value : activeProjects.value).filter(item => matches(item.taskTitle, item.taskRoleType)))
+const filteredApplications = computed(() => applications.value.filter(item => matches(item.taskTitle, item.taskRoleType)))
+const shortlistStatusLabel: Record<string, string> = {
+  OPEN: '已发布',
+  CLOSED: '已撤下',
+  DRAFT: '草稿',
+}
+const filteredShortlists = computed(() => shortlists.value.filter(item => matches(item.title, item.roleType)))
+const resultCount = computed(() => tab.value === 'applications' ? filteredApplications.value.length : tab.value === 'candidates' ? filteredShortlists.value.length : orderedProjects.value.length)
+function openProject(item: Project, section = 'detail') {
+  if (isMobile.value) void router.push(`/me/projects/${item.id}/${section}`)
+  else { selected.value = item; panelTab.value = section }
+}
 const projectStatusLabel: Record<string, string> = {
   ACTIVE: '进行中',
   COMPLETING: '结项待验收',
@@ -65,79 +71,9 @@ const applicationStatusColor: Record<string, string> = {
   WITHDRAWN: 'gray',
 }
 
-function projectRole(item: Project) {
-  return (item.taskRoleType || '').toUpperCase()
-}
-
-function applicationRole(item: Application) {
-  return (item.taskRoleType || '').toUpperCase()
-}
-
-const activeProjects = computed(() =>
-  projects.value.filter((item) => item.status !== 'TERMINATED'),
-)
-
-const pendingApplications = computed(() =>
-  applications.value.filter((item) => item.status !== 'ACCEPTED'),
-)
-
-const roleCounts = computed(() => {
-  const counts = { TA: 0, INTERN: 0, RA: 0, TEAM: 0 }
-  if (tab.value === 'enrolled') {
-    for (const item of activeProjects.value) {
-      const role = projectRole(item)
-      if (role in counts) counts[role as keyof typeof counts] += 1
-    }
-  } else if (tab.value === 'applications') {
-    for (const item of pendingApplications.value) {
-      const role = applicationRole(item)
-      if (role in counts) counts[role as keyof typeof counts] += 1
-    }
-  } else {
-    for (const item of shortlists.value) {
-      const role = (item.roleType || '').toUpperCase()
-      if (role in counts) counts[role as keyof typeof counts] += 1
-    }
-  }
-  return counts
-})
-
-const orderedProjects = computed(() =>
-  [...activeProjects.value]
-    .filter((item) => projectRole(item) === roleTab.value)
-    .sort((a, b) => Number(b.status === 'ACTIVE') - Number(a.status === 'ACTIVE')),
-)
-
-const filteredApplications = computed(() =>
-  pendingApplications.value.filter((item) => applicationRole(item) === roleTab.value),
-)
-
-const filteredShortlists = computed(() =>
-  shortlists.value.filter((item) => (item.roleType || '').toUpperCase() === roleTab.value),
-)
-
-const roleLabel = computed(() => TASK_ROLE_LABEL[roleTab.value] || roleTab.value)
-
-const emptyDescription = computed(() => {
-  if (tab.value === 'enrolled') return `还没有已接的${roleLabel.value}，申请通过入项后会出现在这里`
-  if (tab.value === 'applications') return `还没有待处理的${roleLabel.value}申请，通过后会进入「已接项目」`
-  return `暂无备选的${roleLabel.value}，在任务详情页可点「加入备选」`
-})
-
-function rememberRoleTab() {
-  sessionStorage.setItem(ROLE_STORAGE_KEY, roleTab.value)
-}
-
-function syncRoleQuery() {
-  rememberRoleTab()
-  const nextQuery = { ...route.query, roleType: roleTab.value }
-  void router.replace({ path: route.path, query: nextQuery })
-}
-
-watch(roleTab, syncRoleQuery)
-
 async function load() {
   loading.value = true
+  error.value = ''
   try {
     const [projectList, applicationList, shortlist] = await Promise.all([
       api<Project[]>('/api/v1/projects'),
@@ -148,17 +84,16 @@ async function load() {
     applications.value = applicationList
     shortlists.value = shortlist
   } catch (cause) {
-    Message.error(cause instanceof Error ? cause.message : '加载失败')
+    error.value = cause instanceof Error ? cause.message : '加载失败'
   } finally {
     loading.value = false
   }
 }
 
 function switchTab(key: string | number) {
-  const query = { roleType: roleTab.value }
-  if (key === 'applications') router.push({ path: '/me/workbench/applications', query })
-  else if (key === 'candidates') router.push({ path: '/me/workbench/candidates', query })
-  else router.push({ path: '/me/workbench', query })
+  selected.value = null
+  const path = key === 'applications' ? '/me/workbench/applications' : key === 'candidates' ? '/me/workbench/candidates' : '/me/workbench'
+  void router.push({ path, query: { ...route.query, view: key === 'ended' ? 'ended' : undefined } })
 }
 
 async function removeShortlist(taskId: number) {
@@ -174,299 +109,125 @@ async function removeShortlist(taskId: number) {
   }
 }
 
-onMounted(() => {
-  rememberRoleTab()
-  load()
-})
+onMounted(load)
+watch(isMobile, () => { selected.value = null })
 </script>
 
 <template>
-  <section class="workbench" :class="{ 'workbench-mobile': isMobile }">
-    <header v-if="!isMobile" class="page-head">
-      <div>
-        <a-typography-title :heading="4" style="margin: 0">工作台</a-typography-title>
-        <p class="subtitle">查看项目进展、申请结果和备选项目。</p>
-      </div>
-      <router-link to="/plaza" class="discover-link">探索新项目 ↗</router-link>
+  <section class="workbench">
+    <header class="wb-heading">
+      <div><h1>我的工作台</h1><p>项目进展与申请，一处处理。</p></div>
+      <router-link to="/plaza">探索项目</router-link>
     </header>
-    <div v-else class="mobile-wb-head">
-      <router-link to="/plaza" class="discover-link">探索新项目 ↗</router-link>
+    <div class="wb-surface">
+      <div class="wb-navigation">
+        <a-tabs :active-key="tab === 'candidates' ? '' : tab" @change="switchTab">
+          <a-tab-pane key="enrolled" :title="`已接项目 ${activeProjects.length}`" />
+          <a-tab-pane key="applications" :title="`我的申请 ${applications.length}`" />
+          <a-tab-pane key="ended" :title="`已结束 ${endedProjects.length}`" />
+        </a-tabs>
+        <button class="saved-link" :class="{ selected: tab === 'candidates' }" @click="switchTab('candidates')">备选 {{ shortlists.length }}</button>
+      </div>
+      <div class="wb-toolbar">
+        <a-input :model-value="search" placeholder="搜索项目名称" allow-clear aria-label="搜索项目名称" @update:model-value="filterQuery('q', $event)" />
+        <a-select :model-value="roleTab" aria-label="频道筛选" @update:model-value="filterQuery('roleType', String($event))">
+          <a-option value="">全部</a-option>
+          <a-option v-for="role in TASK_ROLE_TYPES" :key="role.value" :value="role.value">{{ role.label }}</a-option>
+        </a-select>
+        <span v-if="!isMobile" class="result-count">{{ resultCount }} 个结果</span>
+        <a-button :loading="loading" @click="load">刷新</a-button>
+      </div>
+      <a-alert v-if="error" type="error">{{ error }}，请点击刷新重试。</a-alert>
+      <a-spin :loading="loading" style="width:100%">
+        <div v-if="!isMobile" class="wb-columns"><span>项目 / 频道</span><span>发布方</span><span>状态</span><span>操作</span></div>
+        <div v-if="!error && !loading && !resultCount" class="wb-empty">
+          <a-empty :description="search || roleTab ? '没有符合筛选条件的项目' : tab === 'ended' ? '还没有已结束的项目' : tab === 'applications' ? '还没有申请记录' : tab === 'candidates' ? '在项目详情页加入备选，方便稍后申请' : '申请通过入项后，项目会出现在这里'" />
+          <a-button v-if="search || roleTab" @click="router.replace({ query: { view: route.query.view } })">清除筛选</a-button>
+          <router-link v-else to="/plaza">去探索项目</router-link>
+        </div>
+        <template v-else-if="tab === 'enrolled' || tab === 'ended'">
+
+          <article v-for="item in orderedProjects" :key="item.id" class="wb-row">
+            <div class="project-name"><button @click="openProject(item)">{{ item.taskTitle }}</button><span>{{ TASK_ROLE_LABEL[item.taskRoleType || ''] || '项目' }}</span></div>
+            <div class="publisher"><span v-if="isMobile">发布方 </span>{{ item.publisherName }}</div>
+            <div class="status"><a-tag :color="projectStatusColor[item.status]">{{ projectStatusLabel[item.status] || item.status }}</a-tag></div>
+            <div class="row-actions"><a-button v-if="item.status === 'ACTIVE'" type="primary" @click="openProject(item, 'progress')">提交周报</a-button><a-button v-else type="primary" @click="openProject(item, 'completion')">查看结项</a-button><a-button type="text" @click="openProject(item)">详情</a-button></div>
+          </article>
+        </template>
+        <template v-else-if="tab === 'applications'">
+          <article v-for="item in filteredApplications" :key="item.id" class="wb-row">
+            <div class="project-name"><router-link :to="{path: `/tasks/${item.taskId}`, query: {from: 'workbench', tab: 'applications'}}">{{ item.taskTitle }}</router-link><span>{{ TASK_ROLE_LABEL[item.taskRoleType || ''] }}<template v-if="item.positionTitle"> · {{ item.positionTitle }}</template></span><p v-if="item.reviewNote" class="review-note">{{ item.reviewNote }}</p></div>
+            <div class="publisher"><span v-if="isMobile">发布方 </span>{{ item.publisherName || '—' }}</div>
+            <div class="status"><a-tag :color="applicationStatusColor[item.status]">{{ applicationStatusLabel[item.status] || item.status }}</a-tag></div>
+            <div class="row-actions"><router-link :to="{path: `/tasks/${item.taskId}`, query: {from: 'workbench', tab: 'applications'}}">查看申请</router-link></div>
+          </article>
+        </template>
+        <template v-else>
+          <article v-for="item in filteredShortlists" :key="item.id" class="wb-row">
+            <div class="project-name"><router-link :to="`/tasks/${item.id}`">{{ item.title }}</router-link><span>{{ TASK_ROLE_LABEL[item.roleType] || item.roleType }}</span></div>
+            <div class="publisher"><span v-if="isMobile">发布方 </span>{{ item.publisherName || '—' }}</div>
+            <div class="status"><a-tag :color="item.status === 'OPEN' ? 'green' : 'gray'">{{ shortlistStatusLabel[item.status] || item.status }}</a-tag></div>
+            <div class="row-actions"><router-link :to="{path: `/tasks/${item.id}`, query: {from: 'workbench', tab: 'candidates'}}">查看项目</router-link><a-button type="text" :disabled="loading" @click="removeShortlist(item.id)">取消备选</a-button></div>
+          </article>
+        </template>
+      </a-spin>
     </div>
-
-    <nav class="role-tabs" :class="{ compact: isMobile }" aria-label="任务类型">
-      <button
-        v-for="item in TASK_ROLE_TYPES"
-        :key="item.value"
-        type="button"
-        class="role-tab"
-        :class="{ active: roleTab === item.value }"
-        :aria-pressed="roleTab === item.value"
-        @click="roleTab = item.value"
-      >
-        <span class="role-name">{{ isMobile ? item.shortLabel : item.label }}</span>
-        <span class="role-count">{{ roleCounts[item.value] }}</span>
-      </button>
-    </nav>
-
-    <div class="workbench-main">
-    <a-tabs class="workspace-tabs" :active-key="tab" :type="isMobile ? 'rounded' : 'line'" :size="isMobile ? 'medium' : 'large'" @change="switchTab">
-      <a-tab-pane key="enrolled" :title="`已接项目 · ${orderedProjects.length}`" />
-      <a-tab-pane key="applications" :title="`已申请 · ${filteredApplications.length}`" />
-      <a-tab-pane key="candidates" :title="`备选项目 · ${filteredShortlists.length}`" />
-    </a-tabs>
-
-    <a-spin :loading="loading" style="width: 100%; margin-top: 8px">
-      <template v-if="tab === 'enrolled'">
-        <div v-if="!loading && orderedProjects.length === 0" class="empty-state">
-          <a-empty :description="emptyDescription" />
-        </div>
-        <div v-else class="task-grid">
-          <router-link
-            v-for="item in orderedProjects"
-            :key="item.id"
-            class="task-card-link"
-            :to="`/me/projects/${item.id}/${item.status === 'ACTIVE' ? 'progress' : 'completion'}`"
-          >
-            <a-card class="task-card work-card" hoverable :bordered="true">
-              <div class="card-top">
-                <a-space wrap :size="6">
-                  <a-tag color="arcoblue" size="small">{{ TASK_ROLE_LABEL[item.taskRoleType || ''] || item.taskRoleType }}</a-tag>
-                  <a-tag v-if="item.taskRoleType !== 'TA' && item.taskType" size="small">{{ item.taskType }}</a-tag>
-                  <a-tag :color="projectStatusColor[item.status] || 'gray'" size="small">
-                    {{ projectStatusLabel[item.status] || item.status }}
-                  </a-tag>
-                </a-space>
-              </div>
-              <a-typography-title :heading="6" style="margin: 14px 0 10px">{{ item.taskTitle }}</a-typography-title>
-              <div class="card-meta">
-                <span>发布方 {{ item.publisherName }}</span>
-              </div>
-              <div class="card-foot">
-                <span>{{ item.status === 'ACTIVE' ? '进入项目' : '查看项目' }} →</span>
-              </div>
-            </a-card>
-          </router-link>
+    <a-drawer :visible="!!selected && !isMobile" :width="'min(860px, 85vw)'" :footer="false" unmount-on-close @cancel="selected = null">
+      <template #title>
+        <div class="project-drawer-heading">
+          <span>{{ selected?.taskTitle }}</span>
+          <router-link v-if="selected" :to="`/me/projects/${selected.id}/${panelTab}`">打开完整项目</router-link>
         </div>
       </template>
-
-      <template v-else-if="tab === 'applications'">
-        <div v-if="!loading && filteredApplications.length === 0" class="empty-state">
-          <a-empty :description="emptyDescription" />
-        </div>
-        <div v-else class="task-grid">
-          <router-link
-            v-for="item in filteredApplications"
-            :key="item.id"
-            class="task-card-link"
-            :to="{ path: `/tasks/${item.taskId}`, query: { from: 'workbench', tab: 'applications' } }"
-          >
-            <a-card class="task-card work-card" hoverable>
-              <div class="card-top">
-                <a-space wrap :size="6">
-                  <a-tag color="arcoblue" size="small">{{ TASK_ROLE_LABEL[item.taskRoleType || ''] || item.taskRoleType }}</a-tag>
-                  <a-tag v-if="item.taskRoleType !== 'TA' && item.taskType" size="small">{{ item.taskType }}</a-tag>
-                  <a-tag :color="applicationStatusColor[item.status] || 'gray'" size="small">
-                    {{ applicationStatusLabel[item.status] || item.status }}
-                  </a-tag>
-                </a-space>
-              </div>
-              <a-typography-title :heading="6" style="margin: 14px 0 10px">{{ item.taskTitle }}</a-typography-title>
-              <div class="card-meta">
-                <span v-if="item.positionTitle">岗位 {{ item.positionTitle }}</span>
-                <span>投递于 {{ item.createdAt.replace('T', ' ').slice(0, 16) }}</span>
-                <span v-if="item.reviewNote">审阅：{{ item.reviewNote }}</span>
-              </div>
-              <div class="card-foot">
-                <span>查看任务 →</span>
-              </div>
-            </a-card>
-          </router-link>
-        </div>
-      </template>
-
-      <template v-else>
-        <div v-if="!loading && filteredShortlists.length === 0" class="empty-state">
-          <a-empty :description="emptyDescription" />
-        </div>
-        <div v-else class="task-grid">
-          <div
-            v-for="item in filteredShortlists"
-            :key="item.id"
-            class="task-card-link"
-          >
-            <a-card class="task-card work-card" hoverable>
-              <div class="card-top">
-                <a-space wrap :size="6">
-                  <a-tag color="arcoblue" size="small">{{ TASK_ROLE_LABEL[item.roleType] || item.roleType }}</a-tag>
-                  <a-tag v-if="item.roleType !== 'TA'" size="small">{{ item.techField }}</a-tag>
-                  <a-tag v-if="item.roleType === 'INTERN'" size="small">{{ item.difficulty }}</a-tag>
-                  <a-tag size="small">备选中</a-tag>
-                </a-space>
-              </div>
-              <a-typography-title :heading="6" style="margin: 14px 0 10px">
-                <router-link class="title-link" :to="{ path: `/tasks/${item.id}`, query: { from: 'workbench', tab: 'candidates' } }">{{ item.title }}</router-link>
-              </a-typography-title>
-              <div class="card-meta">
-                <span>发布方 {{ item.publisherName }}</span>
-                <span>{{ item.durationWeeks }} 周</span>
-              </div>
-              <div class="card-foot candidate-actions">
-                <a-button size="mini" status="danger" type="outline" :loading="loading" @click="removeShortlist(item.id)">
-                  取消备选
-                </a-button>
-                <router-link class="detail-link" :to="{ path: `/tasks/${item.id}`, query: { from: 'workbench', tab: 'candidates' } }">查看详情 →</router-link>
-              </div>
-            </a-card>
-          </div>
-        </div>
-      </template>
-    </a-spin>
-    </div>
+      <WorkbenchProjectPanel v-if="selected" :key="selected.id" :project-id="selected.id" :initial-tab="panelTab" @tab-change="panelTab = $event" @updated="load" />
+    </a-drawer>
   </section>
 </template>
 
 <style scoped>
-.workbench { max-width: 100%; margin: 0 auto; padding: 8px 0 40px; }
-.page-head { align-items: center; margin-bottom: 18px; }
-.discover-link { color: #2563eb; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.workbench-main { min-width: 0; }
-.role-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  margin: 0 0 14px;
-  padding: 0 10px;
-  background: #fff;
-  border: 1px solid var(--desktop-line, #e2e8f0);
-  border-radius: 12px;
+.project-drawer-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; padding-right: 16px; box-sizing: border-box; }
+.project-drawer-heading > span { min-width: 0; overflow-wrap: anywhere; }
+.project-drawer-heading > a { flex-shrink: 0; color: #2563eb; font-size: 13px; font-weight: 500; }
+.workbench { --wb-line: #e5eaf1; --wb-muted: #64748b; padding: 8px 0 32px; }
+.wb-heading { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; gap:16px; }
+.wb-heading h1 { font-size:24px; margin:0 0 6px; color:#172033; }
+.wb-heading p { color:var(--wb-muted); margin:0; font-size:14px; }
+.workbench a { color:#2563eb; }
+.wb-surface { background:white; border:1px solid var(--wb-line); border-radius:12px; overflow:hidden; }
+.wb-navigation { display:flex; align-items:center; padding:0 24px; border-bottom:1px solid var(--wb-line); gap:16px; }
+.wb-navigation :deep(.arco-tabs) { flex:1; min-width:0; }
+.wb-navigation :deep(.arco-tabs-nav::before) { display:none; }
+.wb-navigation :deep(.arco-tabs-content) { display:none; }
+.wb-navigation :deep(.arco-tabs-tab) { padding:20px 0; }
+.saved-link { border:0; background:none; font:inherit; color:var(--wb-muted); cursor:pointer; padding:12px 0; white-space:nowrap; }
+.saved-link.selected { color:#2563eb; font-weight:600; }
+.wb-toolbar { display:flex; align-items:center; gap:12px; padding:20px 24px; }
+.wb-toolbar :deep(.arco-input-wrapper) { max-width:300px; }
+.wb-toolbar :deep(.arco-select) { width:150px; flex-shrink:0; }
+.result-count { color:var(--wb-muted); font-size:13px; margin-left:auto; white-space:nowrap; }
+.wb-row,.wb-columns { display:grid; grid-template-columns:minmax(0,1fr) 140px 130px 190px; gap:20px; align-items:center; padding:22px 24px; }
+.wb-columns { background:#f8fafc; padding-top:12px; padding-bottom:12px; font-size:12px; color:var(--wb-muted); }
+.wb-row + .wb-row { border-top:1px solid var(--wb-line); }
+.wb-row:hover { background:#fbfcfe; }
+.project-name { min-width:0; display:flex; flex-direction:column; gap:8px; }
+.project-name button,.project-name > a { font:inherit; font-weight:600; font-size:15px; text-align:left; color:#172033; border:0; background:none; padding:0; cursor:pointer; line-height:1.6; overflow-wrap:anywhere; }
+.project-name button:hover,.project-name > a:hover { color:#2563eb; }
+.project-name > span,.publisher,.review-note { font-size:13px; color:var(--wb-muted); line-height:1.6; }
+.review-note { margin:0; }
+.row-actions { display:flex; align-items:center; gap:8px; justify-content:flex-end; }
+@media (min-width:769px) {
+  .wb-columns > :last-child { text-align:center; }
+  .wb-row .row-actions { justify-content:center; }
 }
-.role-tab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin: 0;
-  padding: 13px 16px 11px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  cursor: pointer;
-  text-align: center;
-  font: inherit;
-  transition: color 0.15s ease, border-color 0.15s ease;
+.wb-empty { padding:56px 16px; text-align:center; display:grid; gap:20px; justify-items:center; }
+button:focus-visible,a:focus-visible { outline:2px solid #2563eb; outline-offset:4px; }
+@media (min-width:769px) and (max-width:1100px) { .wb-row,.wb-columns { grid-template-columns:minmax(0,1fr) 90px 100px 160px; gap:12px; padding-left:16px; padding-right:16px; }}
+@media (max-width:768px) {
+  .wb-heading { margin-bottom:18px; }.wb-heading h1 { font-size:20px; }.wb-heading p { font-size:12px; }.wb-heading > a { font-size:13px; white-space:nowrap; }
+  .wb-surface { background:transparent; border:0; overflow:visible; }
+  .wb-navigation { padding:0; gap:10px; }.wb-navigation :deep(.arco-tabs-tab) { margin:0 14px 0 0; padding:14px 0; font-size:13px; }.saved-link { font-size:12px; }
+  .wb-toolbar { padding:16px 0; gap:8px; flex-wrap:wrap; }.wb-toolbar :deep(.arco-input-wrapper) { flex:1; max-width:none; min-width:100px; }.wb-toolbar :deep(.arco-select) { width:108px; }.wb-toolbar > :deep(.arco-btn) { padding:0 10px; }
+  .wb-row { position:relative; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; padding:18px 16px; background:white; border:1px solid var(--wb-line); border-radius:10px; margin-bottom:12px; }
+  .project-name { grid-column:1 / -1; }.publisher { grid-column:1; }.status { grid-column:2; grid-row:2; }.row-actions { grid-column:1 / -1; border-top:1px solid #f0f3f7; padding-top:12px; margin-top:2px; }.row-actions :deep(.arco-btn) { min-height:40px; }.row-actions > a { padding:10px 0; }.project-name > span { font-size:12px; }.application-row .status { grid-column:1 / -1; justify-self:start; }
 }
-.role-tab:hover .role-name { color: #1d4ed8; }
-.role-tab.active {
-  border-bottom-color: var(--desktop-accent, #2563eb);
-  background: transparent;
-  box-shadow: none;
-}
-.role-name {
-  font-size: 14px;
-  font-weight: 650;
-  color: #111827;
-  min-width: 0;
-  white-space: nowrap;
-}
-.role-tab.active .role-name { color: #1d4ed8; }
-.role-count {
-  min-width: 1.25em;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  font-size: 12px;
-  color: #64748b;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-.role-tab.active .role-count {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-.role-tabs.compact {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  margin-bottom: 12px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-.role-tabs.compact .role-tab {
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 8px 4px;
-  border: 1px solid #eef2f7;
-  border-radius: 10px;
-  background: #fff;
-  text-align: center;
-}
-.role-tabs.compact .role-tab.active {
-  border-color: #2563eb;
-  background: var(--heading-surface);
-  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.1);
-}
-.role-tabs.compact .role-name { font-size: 13px; white-space: nowrap; }
-.role-tabs.compact .role-count {
-  font-size: 11px;
-  padding: 0;
-  background: transparent;
-}
-.role-tabs.compact .role-tab.active .role-count {
-  background: transparent;
-}
-.task-grid { display: flex; flex-direction: column; gap: 12px; background: transparent; border: 0; border-radius: 0; overflow: visible; }
-.task-card-link + .task-card-link { border-top: 0; }
-.work-card {
-  border: 1px solid #eef2f7 !important;
-  border-radius: var(--surface-radius);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  background: #fff;
-}
-.work-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-  background: #fff;
-  border-color: #bfdbfe !important;
-}
-.work-card :deep(.arco-card-body) { padding: 22px 26px; display: grid; grid-template-columns: minmax(0,1fr) auto; column-gap: 24px; }
-.card-top { grid-column: 1; }
-.work-card :deep(h6) { grid-column: 1; font-size: 17px; line-height: 1.5; font-weight: 700; }
-.card-meta { grid-column: 1; display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: #6b7280; line-height: 1.7; }
-.card-foot { grid-column: 2; grid-row: 1 / 4; display: flex; align-items: center; font-size: 13px; color: #2563eb; font-weight: 600; }
-.candidate-actions { flex-direction: column; justify-content: center; gap: 10px; align-items: flex-end; }
-.title-link { color: inherit; text-decoration: none; }
-.title-link:hover { color: #2563eb; }
-.detail-link { color: #2563eb; font-weight: 600; text-decoration: none; white-space: nowrap; }
-.mobile-wb-head {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-.workbench-mobile .work-card :deep(.arco-card-body) {
-  padding: 16px;
-  display: block;
-}
-.workbench-mobile .card-foot {
-  margin-top: 14px;
-  justify-content: flex-start;
-}
-.workbench-mobile .candidate-actions {
-  align-items: stretch;
-  flex-direction: row;
-  flex-wrap: wrap;
-}
-.workbench-mobile :deep(.arco-tabs-nav-tab) {
-  font-size: 13px;
-}
-.workbench-mobile .workspace-tabs { margin-top: 8px; }
-.workbench-mobile .role-tabs.compact .role-tab { min-height: 44px; }
-.workbench-mobile .work-card { border-radius: var(--mobile-radius); }
-@media (max-width: 600px) { .work-card :deep(.arco-card-body) { padding: 18px; display: block; }.card-foot { margin-top: 16px; }.candidate-actions { align-items: flex-start; }.page-head { align-items: flex-start; }.subtitle { max-width: 220px; } }
 </style>

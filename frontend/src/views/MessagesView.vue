@@ -647,7 +647,7 @@ watch(
 }
 .bubble-row {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 8px;
   margin-bottom: 14px;
 }
@@ -695,12 +695,11 @@ watch(
   border-top: 1px solid #e5eaf1;
   background: #fff;
 }
-.composer-input :deep(.arco-textarea-wrapper),
-.composer-input:deep(textarea) {
+.composer-input {
   background: #fff;
   border: 0 !important;
   box-shadow: none !important;
-  padding: 0;
+  padding: 8px 12px;
 }
 .composer-input :deep(textarea) {
   min-height: 72px;

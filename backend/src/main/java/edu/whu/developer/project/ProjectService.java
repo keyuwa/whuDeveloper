@@ -226,13 +226,16 @@ public class ProjectService {
                 String.valueOf(report.getId()),
                 "REPORT_SUBMIT:" + report.getId());
         audit.record(student.getId(), "REPORT", report.getId(), "SUBMIT", String.valueOf(nextIndex));
+        notifications.push(project.getPublisher().getId(), "周报待审阅",
+                project.getStudent().getDisplayName() + "提交了「" + project.getTask().getTitle() + "」第 " + nextIndex + " 周周报。",
+                "/publisher/projects/" + projectId + "/progress#report-" + report.getId());
         return toResponse(project);
     }
 
     @Transactional
     public ProjectResponse scoreReport(Long projectId, Long reportId, ScoreRequest request) {
         AuthUser publisher = AuthSupport.requireRole(Role.PUBLISHER);
-        Project project = visible(projectId);
+        Project project = visibleForUpdate(projectId);
         if (!project.getPublisher().getId().equals(publisher.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能给自己的项目反馈周报");
         }
@@ -240,6 +243,9 @@ public class ProjectService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "周报不存在"));
         if (!report.getProject().getId().equals(projectId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "周报不存在");
+        }
+        if (!"SUBMITTED".equals(report.getStatus()) || "TERMINATED".equals(project.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "周报不在待审状态");
         }
         report.setScore(request.score());
         report.setScoreComment(blank(request.comment()));
@@ -256,6 +262,9 @@ public class ProjectService {
                     "REPORT_SCORE:" + report.getId());
         }
         audit.record(publisher.getId(), "REPORT", report.getId(), "SCORE", detail);
+        notifications.push(project.getStudent().getId(), "周报已审阅",
+                "「" + project.getTask().getTitle() + "」第 " + report.getWeekIndex() + " 周周报已审阅。",
+                "/me/projects/" + projectId + "/progress#report-" + reportId);
         return toResponse(project);
     }
 
@@ -291,10 +300,15 @@ public class ProjectService {
         completion.setPrUrls(String.join("\n", urls));
         completion.setStatus("SUBMITTED");
         completion.setReviewNote(null);
+        completion.setReviewedAt(null);
+        completion.setCreatedAt(LocalDateTime.now());
         completions.save(completion);
         project.setStatus("COMPLETING");
         String auditDetail = reportFileUrl != null ? reportFileUrl : "TEXT";
         audit.record(student.getId(), "COMPLETION", completion.getId(), "SUBMIT", auditDetail);
+        notifications.push(project.getPublisher().getId(), "结项待验收",
+                project.getStudent().getDisplayName() + "提交了「" + project.getTask().getTitle() + "」的结项材料。",
+                "/publisher/projects/" + projectId + "/completion");
         return toResponse(project);
     }
 
@@ -324,12 +338,19 @@ public class ProjectService {
                     "COMPLETION_APPROVE:" + projectId);
             audit.record(publisher.getId(), "COMPLETION", completion.getId(), "APPROVE", null);
         } else if ("REJECT".equals(request.decision())) {
+            if (blank(request.note()) == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请填写退回补充意见");
+            }
             completion.setStatus("REJECTED");
             project.setStatus("ACTIVE");
             audit.record(publisher.getId(), "COMPLETION", completion.getId(), "REJECT", request.note());
         } else {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "决定只能是通过或驳回");
         }
+        boolean approved = "APPROVED".equals(completion.getStatus());
+        notifications.push(project.getStudent().getId(), approved ? "结项已通过" : "结项需补充",
+                "「" + project.getTask().getTitle() + (approved ? "」已通过验收。" : "」的结项材料已退回，请查看意见。"),
+                "/me/projects/" + projectId + "/completion");
         return toResponse(project);
     }
 

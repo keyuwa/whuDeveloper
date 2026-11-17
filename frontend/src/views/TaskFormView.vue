@@ -13,7 +13,7 @@ const isMobile = useIsMobile()
 const formRef = ref()
 const loading = ref(false)
 const taskStatus = ref<string | null>(null)
-const selectedLanguages = ref<string[]>(['TypeScript'])
+const selectedLanguages = ref<string[]>([])
 const selectedEducations = ref<string[]>([])
 const form = reactive({
   title: '',
@@ -22,7 +22,7 @@ const form = reactive({
   difficulty: 'L3',
   background: '',
   techStack: '',
-  programmingLanguages: 'TypeScript',
+  programmingLanguages: '',
   supportLanguages: '中文',
   outputRequirement: '',
   techRequirement: '',
@@ -123,7 +123,7 @@ onMounted(async () => {
     const queryRole = String(route.query.roleType || '').toUpperCase()
     if (queryRole === 'TA' || queryRole === 'INTERN' || queryRole === 'RA' || queryRole === 'TEAM') {
       form.roleType = queryRole
-      if (queryRole !== 'INTERN' && selectedLanguages.value.includes('TypeScript')) {
+      if (queryRole !== 'INTERN' && selectedLanguages.value.length === 0) {
         selectedLanguages.value = ['不限']
       }
     }
@@ -617,7 +617,7 @@ async function save(publish: boolean) {
     </a-form>
 
     <footer class="form-actions">
-      <p>草稿仅自己可见。发布后学生可申请；已发布需先下架，草稿/已下架可在此删除。</p>
+      <p>草稿仅自己可见。发布后学生可申请；已发布需先撤下发布，草稿/已撤下的项目可在此删除。</p>
       <div class="action-buttons">
         <a-button
           v-if="canDeleteTask()"

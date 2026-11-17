@@ -2,12 +2,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api'
 import { auth } from '../auth'
-import { majorScore } from '../majorMatch'
+import { recommendTasks, type RecommendationConfig } from '../majorMatch'
 import { TASK_ROLE_LABEL, type Project, type Task, type TaskPage } from '../types'
 
 const projects = ref<Project[]>([])
 const tasks = ref<Task[]>([])
 const loading = ref(false)
+const recommendationConfig = ref<RecommendationConfig>()
 
 const major = computed(() => (auth.user?.role === 'STUDENT' ? auth.user.major || '' : '').trim())
 
@@ -29,13 +30,9 @@ const progress = computed(() =>
   projects.value.filter((item) => item.status === 'ACTIVE' || item.status === 'COMPLETING'),
 )
 
-const recommended = computed(() => {
-  const ranked = tasks.value
-    .map((task) => ({ task, score: major.value ? majorScore(major.value, task) : 0 }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-  return ranked.slice(0, 4).map((item) => item.task)
-})
+const recommended = computed(() =>
+  recommendTasks(major.value, auth.user?.studentIdentity || '', tasks.value, recommendationConfig.value),
+)
 
 function progressLine(item: Project) {
   const reports = [...(item.reports || [])].sort((a, b) => b.weekIndex - a.weekIndex)
@@ -54,15 +51,16 @@ onMounted(async () => {
   if (!auth.token || auth.user?.role !== 'STUDENT') return
   loading.value = true
   try {
-    const [mine, page] = await Promise.all([
+    const [mine, page, research, config] = await Promise.allSettled([
       api<Project[]>('/api/v1/projects'),
       api<TaskPage>('/api/v1/tasks?page=0&size=50'),
+      api<TaskPage>('/api/v1/tasks?roleType=RA&page=0&size=50'),
+      api<RecommendationConfig>('/api/v1/recommendation-rules'),
     ])
-    projects.value = mine
-    tasks.value = page.items
-  } catch {
-    projects.value = []
-    tasks.value = []
+    if (config.status === 'fulfilled') recommendationConfig.value = config.value
+    projects.value = mine.status === 'fulfilled' ? mine.value : []
+    const candidates = [page, research].flatMap((result) => result.status === 'fulfilled' ? result.value.items : [])
+    tasks.value = [...new Map(candidates.map((task) => [task.id, task])).values()]
   } finally {
     loading.value = false
   }

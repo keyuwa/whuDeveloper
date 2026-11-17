@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import ProjectDetailSection from '../../components/ProjectDetailSection.vue'
+
+defineProps<{ compact?: boolean }>()
+
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { api } from '../../api'
@@ -110,7 +114,7 @@ onUnmounted(stopPoll)
   <a-spin :loading="loading && !project" style="width: 100%">
     <template v-if="project">
       <div class="stack">
-        <a-card class="panel-card" title="申请内容" :bordered="false">
+        <ProjectDetailSection :plain="compact" :class="compact ? 'drawer-section' : 'panel-card'" title="申请内容" :bordered="false">
           <article
             v-if="project.proposalMd"
             class="md-body proposal-view"
@@ -122,7 +126,7 @@ onUnmounted(stopPoll)
             :application-id="project.applicationId"
             :file-name="project.proposalFileName"
           />
-        </a-card>
+        </ProjectDetailSection>
 
         <a-card v-if="showAi" class="ai-card" title="AI 初判结果" :bordered="false">
           <a-space wrap style="margin-bottom: 12px">

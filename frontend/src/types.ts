@@ -94,6 +94,7 @@ export interface PublisherTaskPage extends TaskPage {
 }
 
 export interface Application {
+  publisherName?: string
   id: number
   taskId: number
   taskTitle: string

@@ -1,5 +1,5 @@
 :root {
-  --font: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
   --bg-page: #f5f7fb;
   --bg-subtle: #f8fafc;
   --surface-line: #e2e8f0;

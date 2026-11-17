@@ -1,28 +1,29 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { auth } from './auth'
-import LoginView from './views/LoginView.vue'
-import RegisterView from './views/RegisterView.vue'
-import PlazaView from './views/PlazaView.vue'
-import TaskDetailView from './views/TaskDetailView.vue'
-import WorkbenchView from './views/WorkbenchView.vue'
-import ProjectShell from './views/project/ProjectShell.vue'
-import ProjectDetailView from './views/project/ProjectDetailView.vue'
-import ProjectApplicationView from './views/project/ProjectApplicationView.vue'
-import ProjectMilestonesView from './views/project/ProjectMilestonesView.vue'
-import ProjectCompletionView from './views/project/ProjectCompletionView.vue'
-import MessagesView from './views/MessagesView.vue'
-import ResumeView from './views/ResumeView.vue'
-import MeHomeView from './views/MeHomeView.vue'
-import PublisherTasksView from './views/PublisherTasksView.vue'
-import TaskFormView from './views/TaskFormView.vue'
-import PublisherInboxView from './views/PublisherInboxView.vue'
-import AdminUsersView from './views/AdminUsersView.vue'
-import AdminTasksView from './views/AdminTasksView.vue'
-import AdminRemindersView from './views/AdminRemindersView.vue'
-import AdminSettingsView from './views/AdminSettingsView.vue'
-import AdminDictsView from './views/AdminDictsView.vue'
-import AbilityView from './views/AbilityView.vue'
-import AbilityRubricView from './views/AbilityRubricView.vue'
+
+const LoginView = () => import('./views/LoginView.vue')
+const RegisterView = () => import('./views/RegisterView.vue')
+const PlazaView = () => import('./views/PlazaView.vue')
+const TaskDetailView = () => import('./views/TaskDetailView.vue')
+const WorkbenchView = () => import('./views/WorkbenchView.vue')
+const ProjectShell = () => import('./views/project/ProjectShell.vue')
+const ProjectDetailView = () => import('./views/project/ProjectDetailView.vue')
+const ProjectApplicationView = () => import('./views/project/ProjectApplicationView.vue')
+const ProjectMilestonesView = () => import('./views/project/ProjectMilestonesView.vue')
+const ProjectCompletionView = () => import('./views/project/ProjectCompletionView.vue')
+const MessagesView = () => import('./views/MessagesView.vue')
+const ResumeView = () => import('./views/ResumeView.vue')
+const MeHomeView = () => import('./views/MeHomeView.vue')
+const PublisherTasksView = () => import('./views/PublisherTasksView.vue')
+const TaskFormView = () => import('./views/TaskFormView.vue')
+const PublisherInboxView = () => import('./views/PublisherInboxView.vue')
+const AdminUsersView = () => import('./views/AdminUsersView.vue')
+const AdminTasksView = () => import('./views/AdminTasksView.vue')
+const AdminRemindersView = () => import('./views/AdminRemindersView.vue')
+const AdminSettingsView = () => import('./views/AdminSettingsView.vue')
+const AdminDictsView = () => import('./views/AdminDictsView.vue')
+const AbilityView = () => import('./views/AbilityView.vue')
+const AbilityRubricView = () => import('./views/AbilityRubricView.vue')
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -49,6 +50,7 @@ export const router = createRouter({
       children: [
         { path: '', redirect: (to) => `/me/projects/${to.params.id}/detail` },
         { path: 'detail', component: ProjectDetailView },
+        { path: 'application', component: ProjectApplicationView },
         { path: 'progress', component: ProjectMilestonesView },
         { path: 'milestones', redirect: (to) => `/me/projects/${to.params.id}/progress` },
         { path: 'reports', redirect: (to) => `/me/projects/${to.params.id}/progress` },

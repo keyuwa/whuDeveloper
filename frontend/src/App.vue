@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Message, Modal } from '@arco-design/web-vue'
+import { Message } from '@arco-design/web-vue'
 import { IconDelete, IconNotification } from '@arco-design/web-vue/es/icon'
 import { api } from './api'
 import { auth, logout } from './auth'
@@ -12,6 +12,7 @@ interface NotificationItem {
   id: number
   title: string
   body: string
+  targetPath?: string | null
   readAt: string | null
   createdAt: string
 }
@@ -29,7 +30,7 @@ const route = useRoute()
 const router = useRouter()
 const { isMobile } = provideDevice()
 const unread = ref(0)
-const pendingApplications = ref(0)
+const pendingReviews = ref(0)
 const drawerVisible = ref(false)
 const notifications = ref<NotificationItem[]>([])
 const loadingNotifications = ref(false)
@@ -56,12 +57,7 @@ const selectedKeys = computed(() => {
   }
   if (path.startsWith('/publisher/tasks')) return ['/publisher/tasks']
   if (path.startsWith('/publisher/inbox') || path.startsWith('/publisher/projects')) return ['/publisher/inbox']
-  if (path.startsWith('/admin/')) {
-    const hit = [...adminMenus]
-      .sort((a, b) => b.key.length - a.key.length)
-      .find((item) => path === item.key || path.startsWith(`${item.key}/`))
-    return hit ? [hit.key] : [path]
-  }
+  if (path.startsWith('/admin/')) return ['/admin/users']
   return [path]
 })
 
@@ -76,7 +72,7 @@ const publisherMenus = computed(() => [
   { key: '/publisher/tasks', label: '我的任务' },
   {
     key: '/publisher/inbox',
-    label: pendingApplications.value > 0 ? `审阅 (${pendingApplications.value})` : '审阅',
+    label: pendingReviews.value > 0 ? `审阅 (${pendingReviews.value})` : '审阅',
   },
 ])
 const showDesktopMessages = computed(
@@ -99,7 +95,7 @@ const guestMenus = [
 const menus = computed(() => {
   if (user.value?.role === 'STUDENT') return studentMenus
   if (user.value?.role === 'PUBLISHER') return publisherMenus.value
-  if (user.value?.role === 'ADMIN') return adminMenus
+  if (user.value?.role === 'ADMIN') return [...guestMenus, { key: '/admin/users', label: '管理后台' }]
   return guestMenus
 })
 
@@ -130,7 +126,7 @@ const publisherTabs = computed<TabItem[]>(() => [
   { key: '/publisher/tasks', label: '任务', icon: 'tasks', match: (path) => path.startsWith('/publisher/tasks') },
   {
     key: '/publisher/inbox',
-    label: pendingApplications.value > 0 ? `审阅·${pendingApplications.value}` : '审阅',
+    label: pendingReviews.value > 0 ? `审阅·${pendingReviews.value}` : '审阅',
     icon: 'inbox',
     match: (path) => path.startsWith('/publisher/inbox') || path.startsWith('/publisher/projects'),
   },
@@ -207,24 +203,27 @@ const mobileTitle = computed(() => {
   return 'WHU Dev'
 })
 
-async function refreshPendingApplications() {
+async function refreshPendingReviews() {
   if (!auth.token || auth.user?.role !== 'PUBLISHER') {
-    pendingApplications.value = 0
+    pendingReviews.value = 0
     return
   }
   try {
-    pendingApplications.value = (
-      await api<{ count: number }>('/api/v1/publisher/applications/pending-count')
-    ).count
+    const counts = await Promise.allSettled([
+      api<{ count: number }>('/api/v1/publisher/applications/pending-count'),
+      api<{ count: number }>('/api/v1/projects/review-queue/pending-count'),
+    ])
+    pendingReviews.value = counts.reduce((total, result) =>
+      total + (result.status === 'fulfilled' ? result.value.count : 0), 0)
   } catch {
-    pendingApplications.value = 0
+    pendingReviews.value = 0
   }
 }
 
 async function refreshUnread() {
   if (!auth.token) {
     unread.value = 0
-    pendingApplications.value = 0
+    pendingReviews.value = 0
     return
   }
   try {
@@ -232,7 +231,7 @@ async function refreshUnread() {
   } catch {
     unread.value = 0
   }
-  await refreshPendingApplications()
+  await refreshPendingReviews()
 }
 
 async function loadNotifications() {
@@ -263,6 +262,7 @@ async function markOneRead(item: NotificationItem) {
 }
 
 function notificationTarget(item: NotificationItem) {
+  if (item.targetPath) return item.targetPath
   const titled = item.body.match(/「([^」]+)」/)
   const taskTitle = titled?.[1]
   if (item.title === '任务私信') {
@@ -312,8 +312,10 @@ async function removeOne(item: NotificationItem, event?: Event) {
   }
 }
 
-function clearAll() {
+async function clearAll() {
   if (notifications.value.length === 0) return
+  const { default: Modal } = await import('@arco-design/web-vue/es/modal')
+  await import('@arco-design/web-vue/es/modal/style/index.css')
   Modal.confirm({
     title: '清空通知',
     content: '确定删除全部通知吗？此操作不可恢复。',
@@ -356,13 +358,19 @@ async function loadSiteConfig() {
   }
 }
 
+let notificationPoll: ReturnType<typeof setInterval> | undefined
+
 onMounted(() => {
   refreshUnread()
+  notificationPoll = setInterval(() => {
+    if (auth.token && document.visibilityState === 'visible') void refreshUnread()
+  }, 30_000)
   void loadSiteConfig()
   if (isMobile.value && (route.path === '/' || route.path === '/ability')) {
     void router.replace('/plaza')
   }
 })
+onUnmounted(() => clearInterval(notificationPoll))
 watch(() => auth.token, refreshUnread)
 watch(
   () => route.path,
@@ -409,7 +417,7 @@ function onMenuClick(key: string) {
 function onLogout() {
   logout()
   unread.value = 0
-  pendingApplications.value = 0
+  pendingReviews.value = 0
   notifications.value = []
   drawerVisible.value = false
   router.push('/auth/login')
@@ -526,7 +534,8 @@ function formatTime(value: string) {
       <div class="page" :class="{ 'page-mobile': isMobile, 'desktop-admin': !isMobile && route.path.startsWith('/admin/') }">
         <nav v-if="!isMobile && user?.role === 'ADMIN' && route.path.startsWith('/admin/')" class="desktop-list admin-nav" aria-label="管理后台">
           <router-link v-for="item in adminMenus.filter(item => item.key.startsWith('/admin/'))" :key="item.key"
-            :to="item.key" class="desktop-list-item">{{ item.label }}</router-link>
+            :to="item.key" class="desktop-list-item"
+            :aria-current="route.path === item.key || route.path.startsWith(`${item.key}/`) ? 'page' : undefined">{{ item.label }}</router-link>
         </nav>
         <nav v-if="isMobile && user?.role === 'ADMIN' && route.path.startsWith('/admin/')" class="mobile-admin-nav" aria-label="管理模块">
           <router-link v-for="item in adminMenus.filter(item => item.key.startsWith('/admin/'))" :key="item.key"

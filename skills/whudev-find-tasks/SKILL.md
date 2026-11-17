@@ -1,7 +1,7 @@
 ---
 name: whudev-find-tasks
 description: >-
-  Searches open WHU Dev tasks for a student: 助教 TA, 开发 Intern, 科研 RA, and 难题.
+  Searches open WHU Dev tasks for a student: 助教 TA, 开发 Intern, 科研 RA, and 项目.
   Use when the user asks to find, search, browse, or recommend campus tasks,
   找任务, 任务广场, or WHU Dev openings. Only finding; do not apply, message, or publish.
 ---
@@ -22,7 +22,7 @@ description: >-
 
 | 参数 | 说明 |
 | --- | --- |
-| `roleType` | `TA` 助教、`INTERN` 开发、`RA` 科研、`TEAM` 难题 |
+| `roleType` | `TA` 助教、`INTERN` 开发、`RA` 科研、`TEAM` 项目 |
 | `techField` | 技术领域或研究方向，必须是字典 `value` |
 | `difficulty` | 仅开发任务，字典 `DIFFICULTY` |
 | `programmingLanguage` | 仅开发任务，字典 `PROGRAMMING_LANGUAGE` |

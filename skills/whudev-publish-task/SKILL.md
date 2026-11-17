@@ -2,8 +2,8 @@
 name: whudev-publish-task
 description: >-
   Publishes a WHU Dev task for a teacher or 发布方 (PUBLISHER): 助教 TA, 开发 Intern,
-  科研 RA, or 难题 TEAM. Use when the user asks to publish, post, or create a task,
-  发布任务, or 发一个助教、实习、科研、难题. Only publishing; do not review applications or message students.
+  科研 RA, or 项目 TEAM. Use when the user asks to publish, post, or create a task,
+  发布任务, or 发一个助教、实习、科研、项目. Only publishing; do not review applications or message students.
 ---
 
 # 发布 WHU Dev 任务
@@ -30,7 +30,7 @@ curl -s -X POST "$WHUDEV_BASE_URL/api/v1/auth/login" \
 
 ## 发布前
 
-1. 确认类型：`TA` 助教、`INTERN` 开发、`RA` 科研、`TEAM` 难题。
+1. 确认类型：`TA` 助教、`INTERN` 开发、`RA` 科研、`TEAM` 项目。
 2. 缺的必填项先问用户，不要编造补助、名额、方向或文档。
 3. 方向、难度、语言、学期、岗位都从字典取 `value`：`GET /api/v1/dicts/{type}`。类型见下表。用户给的是中文时，用 `label` 匹配后再提交 `value`。
 4. 把将要提交的标题、类型、方向、补助、名额复述给用户，得到同意后再 `POST`。
@@ -48,7 +48,7 @@ curl -s -X POST "$WHUDEV_BASE_URL/api/v1/auth/login" \
 
 开发任务的需求 PDF：`POST /api/v1/files`，表单字段名 `file`，只接受 PDF。把返回的 `url`、`fileName` 填进 `prdFileUrl`、`prdFileName`。没有这份文件就不要发开发任务。
 
-科研和难题不要传编程语言；助教不要传技术领域。这些字段服务端会自己填默认值。
+科研和项目不要传编程语言；助教不要传技术领域。这些字段服务端会自己填默认值。
 
 ## 成功之后
 

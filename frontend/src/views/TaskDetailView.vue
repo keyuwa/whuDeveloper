@@ -7,6 +7,7 @@ import { auth, setSession } from '../auth'
 import { useIsMobile } from '../composables/useDevice'
 import { loadDicts, scheduleLabelMap } from '../composables/useDicts'
 import { renderMarkdown } from '../markdown'
+import { proposalChannel, proposalGuideText, type ProposalGuides } from '../proposalGuides'
 import {
   CHALLENGE_PROPOSAL_TEMPLATE,
   CHALLENGE_STATUS_LABEL,
@@ -56,9 +57,16 @@ const challengeOpen = computed(() => {
 const openPositions = computed(() =>
   (task.value?.positions || []).filter((item) => item.filled < item.quota),
 )
-const proposalGuideHtml = computed(() =>
-  renderMarkdown(isChallenge.value ? CHALLENGE_PROPOSAL_TEMPLATE : PROPOSAL_TEMPLATE),
-)
+const proposalGuides = ref<ProposalGuides>()
+const proposalGuideHtml = computed(() => {
+  const detail = task.value
+  if (!detail) return ''
+  const guide = proposalGuides.value?.[proposalChannel(detail.roleType, detail.postingMode)]
+  const markdown = guide
+    ? proposalGuideText(guide)
+    : isChallenge.value ? CHALLENGE_PROPOSAL_TEMPLATE : PROPOSAL_TEMPLATE
+  return renderMarkdown(markdown)
+})
 const myProposalHtml = computed(() => renderMarkdown(myApplication.value?.proposalMd || ''))
 const canSubmitApplication = computed(
   () =>
@@ -109,8 +117,15 @@ async function load() {
   proposalFile.value = null
   myApplication.value = null
   selectedPositionId.value = undefined
-  const detail = await api<Task>(`/api/v1/tasks/${taskId}`)
+  const [detail, guides] = await Promise.all([
+    api<Task>(`/api/v1/tasks/${taskId}`),
+    isStudent.value ? api<ProposalGuides>('/api/v1/proposal-guides').catch((cause) => {
+      console.warn('无法读取申请结构提示，使用默认模板', cause)
+      return undefined
+    }) : undefined,
+  ])
   if (id.value !== taskId) return
+  proposalGuides.value = guides
   task.value = detail
   if (task.value.roleType === 'TEAM') {
     const firstOpen = (task.value.positions || []).find((item) => item.filled < item.quota)
@@ -329,7 +344,7 @@ async function startChat() {
                 ? '本科研任务采用揭榜：提交研究方案（文字或 PDF 至少一种）。多人可并行竞标，发布方比选后揭榜入项。'
                 : isTeam
                   ? '请先选择岗位，再填写申请内容或上传 PDF；每个项目仅可申请一次。'
-                  : '可直接填写文字申请，也可另附 PDF；至少提供其中一种。支持 Markdown。' }}
+                  : '可直接填写文字申请，也可另附 PDF；至少提供其中一种。' }}
             </p>
             <div v-if="isTeam" class="position-pick" style="margin-bottom: 14px">
               <strong style="display: block; margin-bottom: 8px">选择岗位</strong>
@@ -347,7 +362,7 @@ async function startChat() {
               </a-radio-group>
               <p v-if="!openPositions.length" style="color: #c0362c; margin: 8px 0 0">当前岗位均已满额</p>
             </div>
-            <div class="application-guide">
+            <div v-if="proposalGuideHtml" class="application-guide">
               <strong>结构提示（填写时可参考，不会自动写入正文）</strong>
               <article class="md-body proposal-guide" v-html="proposalGuideHtml" />
             </div>

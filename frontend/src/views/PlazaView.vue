@@ -8,7 +8,7 @@ import { auth } from '../auth'
 import { useIsMobile } from '../composables/useDevice'
 import { loadDicts, dictOptions, scheduleLabelMap } from '../composables/useDicts'
 import { readCachedSiteConfig, writeCachedSiteConfig } from '../siteConfigCache'
-import { majorScore } from '../majorMatch'
+import { majorScore, type RecommendationConfig } from '../majorMatch'
 import { TASK_ROLE_TYPES, type Task, type TaskPage } from '../types'
 
 defineOptions({ name: 'PlazaView' })
@@ -191,6 +191,7 @@ function matchesAnyRange(value: number, ranges: string[]) {
   return ranges.some((range) => inRange(value, range))
 }
 
+const recommendationConfig = ref<RecommendationConfig>()
 const studentMajor = computed(() =>
   auth.user?.role === 'STUDENT' ? (auth.user.major || '').trim() : '',
 )
@@ -244,12 +245,8 @@ const tasks = computed(() => {
   })
   const major = studentMajor.value
   if (!major) return matched
-  return [...matched].sort((a, b) => majorScore(major, b) - majorScore(major, a))
+  return [...matched].sort((a, b) => majorScore(major, b, recommendationConfig.value) - majorScore(major, a, recommendationConfig.value))
 })
-
-function matchesMajor(task: Task) {
-  return Boolean(studentMajor.value) && majorScore(studentMajor.value, task) > 0
-}
 
 const selectedTaskId = ref<number | null>(null)
 const selectedTask = computed(() => tasks.value.find(task => task.id === selectedTaskId.value) ?? tasks.value[0])
@@ -507,6 +504,18 @@ function unbindPlazaWindowScroll() {
   windowScrollBound = false
 }
 
+watch(() => auth.user?.role === 'STUDENT', async (student, _previous, onCleanup) => {
+  recommendationConfig.value = undefined
+  if (!student) return
+  const controller = new AbortController()
+  onCleanup(() => controller.abort())
+  try {
+    recommendationConfig.value = await api<RecommendationConfig>('/api/v1/recommendation-rules', { signal: controller.signal })
+  } catch (cause) {
+    if (!controller.signal.aborted) console.warn('无法读取推荐配置，使用默认规则', cause)
+  }
+}, { immediate: true })
+
 onMounted(() => {
   // Show spinner immediately; do not wait on dicts/config or first paint looks empty.
   loading.value = true
@@ -571,7 +580,6 @@ onUnmounted(() => {
       </nav>
       <p class="channel-note">
         {{ activeModuleMeta.blurb }}
-        <span v-if="studentMajor">已按专业「{{ studentMajor }}」把更合适的任务排在前面。</span>
       </p>
     </div>
 
@@ -726,7 +734,6 @@ onUnmounted(() => {
             <div class="job-card-top">
               <h3 class="job-title">{{ task.title }}</h3>
               <span class="seat">名额 {{ task.filled }}/{{ task.quota }}</span>
-              <span v-if="matchesMajor(task)" class="seat match">专业匹配</span>
             </div>
             <p class="job-meta">
               <template v-if="isIntern">
@@ -771,7 +778,6 @@ onUnmounted(() => {
             <span class="result-tags">
               <span v-if="task.techField">{{ task.techField }}</span>
               <span>名额 {{ seatLabel(task) }}</span>
-              <span v-if="matchesMajor(task)">专业匹配</span>
             </span>
             <span class="result-publisher">{{ task.publisherName }}</span>
           </button>
@@ -1017,7 +1023,7 @@ onUnmounted(() => {
 }
 .browse-head > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 14px; min-width: 0; }
 .browse-head h1 {
-  font-family: "Sora", "Noto Sans SC", sans-serif;
+  font-family: var(--font);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.03em;

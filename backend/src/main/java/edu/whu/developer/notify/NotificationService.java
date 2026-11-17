@@ -19,10 +19,15 @@ public class NotificationService {
     }
 
     public void push(Long userId, String title, String body) {
+        push(userId, title, body, null);
+    }
+
+    public void push(Long userId, String title, String body, String targetPath) {
         Notification notification = new Notification();
         notification.setUserId(userId);
         notification.setTitle(title);
         notification.setBody(body);
+        notification.setTargetPath(targetPath);
         notifications.save(notification);
     }
 

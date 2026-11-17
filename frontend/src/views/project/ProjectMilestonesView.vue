@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import ProjectDetailSection from '../../components/ProjectDetailSection.vue'
+
+defineProps<{ compact?: boolean }>()
+
+import { computed, nextTick, watch, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import ProposalFile from '../../components/ProposalFile.vue'
 import { useProjectWorkspace } from '../../composables/useProjectWorkspace'
-import { renderMarkdown } from '../../markdown'
 
 const { project, saving, isStudent, isPublisher, run } = useProjectWorkspace()
 
@@ -113,17 +115,7 @@ watch([() => route.hash, () => project.value?.reports], async ([hash]) => {
 
 <template>
   <section v-if="project" class="stack">
-    <a-collapse v-if="project.proposalMd || project.proposalFileName" :bordered="false" class="legacy-proposal">
-      <a-collapse-item key="proposal" header="查看申请内容">
-        <article v-if="project.proposalMd" class="md-body proposal-view" v-html="renderMarkdown(project.proposalMd)" />
-        <div v-if="project.proposalFileName" class="proposal-reference">
-          <span>PDF 附件</span>
-          <ProposalFile :application-id="project.applicationId" :file-name="project.proposalFileName" />
-        </div>
-      </a-collapse-item>
-    </a-collapse>
-
-    <a-card class="panel-card" title="周报" :bordered="false">
+    <ProjectDetailSection :plain="compact" :class="compact ? 'drawer-section' : 'panel-card'" title="周报" :bordered="false">
       <div v-if="isStudent && project.status === 'ACTIVE'" class="submit-box">
         <div class="focus-label" style="margin-bottom: 10px">提交本周周报</div>
         <div v-if="lastPlan" class="last-plan">
@@ -154,6 +146,7 @@ watch([() => route.hash, () => project.value?.reports], async ([hash]) => {
         </div>
       </div>
 
+      <h3 v-if="compact && sortedReports.length" class="history-title">历史周报 · {{ sortedReports.length }}</h3>
       <div v-if="sortedReports.length" class="report-list" :class="{ 'with-submit': isStudent && project.status === 'ACTIVE' }">
         <article
           v-for="item in sortedReports"
@@ -206,7 +199,7 @@ watch([() => route.hash, () => project.value?.reports], async ([hash]) => {
         </article>
       </div>
       <a-empty v-else description="暂无周报" />
-    </a-card>
+    </ProjectDetailSection>
   </section>
 </template>
 
@@ -295,31 +288,5 @@ watch([() => route.hash, () => project.value?.reports], async ([hash]) => {
 .panel-card {
   border-radius: 4px;
   border: 1px solid #e7ebf0;
-}
-.proposal-reference {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: #687789;
-  font-size: 13px;
-}
-.proposal-reference :deep(.proposal-file) {
-  padding: 8px 10px;
-  background: transparent;
-  border: 0;
-}
-.proposal-reference :deep(.file-name) {
-  max-width: 190px;
-}
-.legacy-proposal {
-  background: #fff;
-}
-@media (max-width: 700px) {
-  .proposal-reference {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
-  }
 }
 </style>
