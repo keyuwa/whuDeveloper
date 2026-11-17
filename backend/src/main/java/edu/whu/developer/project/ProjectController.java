@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/projects")
@@ -29,6 +30,16 @@ public class ProjectController {
     @GetMapping
     public List<ProjectResponse> mine() {
         return projects.mine();
+    }
+
+    @GetMapping("/review-queue")
+    public List<ProjectService.ReviewItem> reviewQueue() {
+        return projects.reviewQueue();
+    }
+
+    @GetMapping("/review-queue/pending-count")
+    public Map<String, Long> pendingReviewCount() {
+        return Map.of("count", projects.pendingReviewCount());
     }
 
     @GetMapping("/{id}")

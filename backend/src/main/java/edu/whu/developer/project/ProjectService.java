@@ -23,6 +23,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.stream.Stream;
 import java.util.List;
 
 @Service
@@ -93,6 +95,37 @@ public class ProjectService {
                 ? projects.findByPublisherIdOrderByIdDesc(user.getId())
                 : projects.findByStudentIdOrderByIdDesc(user.getId());
         return found.stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReviewItem> reviewQueue() {
+        Long publisherId = AuthSupport.requireRole(Role.PUBLISHER).getId();
+        var weekly = reports.findByProjectPublisherIdOrderByCreatedAtDesc(publisherId).stream()
+                .map(report -> reviewItem(report.getProject(), "REPORT", report.getId(), report.getWeekIndex(),
+                        report.getStatus(), report.getCreatedAt()));
+        var finalReports = completions.findByProjectPublisherIdOrderByCreatedAtDesc(publisherId).stream()
+                .map(completion -> reviewItem(completion.getProject(), "COMPLETION", completion.getId(), null,
+                        completion.getStatus(), completion.getCreatedAt()));
+        return Stream.concat(weekly, finalReports)
+                .filter(item -> !"TERMINATED".equals(item.projectStatus()) || !"SUBMITTED".equals(item.status()))
+                .sorted(Comparator.comparing(ReviewItem::submittedAt).reversed())
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public long pendingReviewCount() {
+        Long publisherId = AuthSupport.requireRole(Role.PUBLISHER).getId();
+        return reports.countByProjectPublisherIdAndStatusAndProjectStatusNot(publisherId, "SUBMITTED", "TERMINATED")
+                + completions.countByProjectPublisherIdAndStatusAndProjectStatusNot(publisherId, "SUBMITTED", "TERMINATED");
+    }
+
+    private ReviewItem reviewItem(Project project, String type, Long id, Integer week, String status, LocalDateTime submittedAt) {
+        return new ReviewItem(id, project.getId(), project.getTask().getTitle(), project.getStudent().getDisplayName(),
+                type, week, status, project.getStatus(), submittedAt);
+    }
+
+    public record ReviewItem(Long id, Long projectId, String taskTitle, String studentName, String type,
+                             Integer weekIndex, String status, String projectStatus, LocalDateTime submittedAt) {
     }
 
     @Transactional(readOnly = true)

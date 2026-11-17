@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import ProposalFile from '../../components/ProposalFile.vue'
 import { useProjectWorkspace } from '../../composables/useProjectWorkspace'
 import { renderMarkdown } from '../../markdown'
@@ -102,6 +103,12 @@ async function feedbackReport(reportId: number) {
     comment: draft.comment.trim() || null,
   })
 }
+const route = useRoute()
+watch([() => route.hash, () => project.value?.reports], async ([hash]) => {
+  if (!/^#report-\d+$/.test(hash)) return
+  await nextTick()
+  document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'center' })
+}, { immediate: true })
 </script>
 
 <template>
@@ -151,6 +158,7 @@ async function feedbackReport(reportId: number) {
         <article
           v-for="item in sortedReports"
           :key="item.id"
+          :id="`report-${item.id}`"
           class="report-item"
           :class="{ pending: item.status === 'SUBMITTED' }"
         >
